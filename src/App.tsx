@@ -66,9 +66,20 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    const unlisten1 = listen<{ transcript: Transcript }>("transcription-done", ({ payload }) => {
+    const unlisten1 = listen<{
+      transcript: Transcript;
+      recordingPath: string;
+    }>("transcription-done", ({ payload }) => {
       setTranscript(payload.transcript);
       setTranscriptionStatus("done");
+      setRecordings((prev) =>
+        prev.map((r) =>
+          r.path === payload.recordingPath ? { ...r, transcript: payload.transcript } : r
+        )
+      );
+      setCurrentRecording((cur) =>
+        cur && cur.path === payload.recordingPath ? { ...cur, transcript: payload.transcript } : cur
+      );
     });
 
     const unlisten2 = listen<{ message: string }>("transcription-error", ({ payload }) => {

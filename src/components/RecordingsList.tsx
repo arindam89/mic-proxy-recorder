@@ -1,7 +1,13 @@
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState, type ReactNode } from "react";
 import { save } from "@tauri-apps/plugin-dialog";
+import { writeTextFile } from "@tauri-apps/plugin-fs";
 import type { Recording, TranscriptionStatus } from "../types";
-import { recordingDisplayLabel, recordingExportBasename } from "../types";
+import {
+  recordingDisplayLabel,
+  recordingExportBasename,
+  recordingSearchHaystack,
+  recordingTranscriptMarkdown,
+} from "../types";
 import RecordingAudio from "./RecordingAudio";
 
 interface Props {
@@ -11,6 +17,29 @@ interface Props {
   onRename: (id: string, displayName: string) => Promise<void>;
   onExportRecording: (recordingPath: string, destinationPath: string) => Promise<void>;
   transcriptionStatus: TranscriptionStatus;
+}
+
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function HighlightMatches({ text, query }: { text: string; query: string }): ReactNode {
+  const q = query.trim();
+  if (!q) return text;
+  const parts = text.split(new RegExp(`(${escapeRegExp(q)})`, "gi"));
+  return (
+    <>
+      {parts.map((part, i) =>
+        part.toLowerCase() === q.toLowerCase() ? (
+          <mark key={i} className="rounded bg-amber-500/35 px-0.5 text-inherit">
+            {part}
+          </mark>
+        ) : (
+          <span key={i}>{part}</span>
+        )
+      )}
+    </>
+  );
 }
 
 export default function RecordingsList({
@@ -24,6 +53,13 @@ export default function RecordingsList({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
   const [savingId, setSavingId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+
+  const filtered = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return recordings;
+    return recordings.filter((r) => recordingSearchHaystack(r).toLowerCase().includes(q));
+  }, [recordings, searchQuery]);
 
   const startEdit = useCallback((r: Recording) => {
     setEditingId(r.id);
@@ -62,6 +98,17 @@ export default function RecordingsList({
     [onExportRecording]
   );
 
+  const handleDownloadTranscript = useCallback(async (r: Recording) => {
+    const md = recordingTranscriptMarkdown(r);
+    if (!md.trim()) return;
+    const label = recordingExportBasename(r);
+    const path = await save({
+      defaultPath: `${label}-transcript.md`,
+      filters: [{ name: "Markdown", extensions: ["md"] }],
+    });
+    if (path) await writeTextFile(path, md);
+  }, []);
+
   if (recordings.length === 0) {
     return (
       <div className="flex flex-1 items-center justify-center text-gray-500">
@@ -72,9 +119,24 @@ export default function RecordingsList({
 
   return (
     <div className="flex-1 overflow-y-auto p-6">
-      <h2 className="mb-4 text-lg font-semibold">Recordings</h2>
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <h2 className="text-lg font-semibold">Recordings</h2>
+        <label className="flex min-w-0 flex-1 flex-col gap-1 sm:max-w-md">
+          <span className="text-xs text-gray-500">Search titles and transcripts</span>
+          <input
+            type="search"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Filter…"
+            className="rounded-lg border border-surface-600 bg-surface-900 px-3 py-2 text-sm text-white placeholder:text-gray-600"
+          />
+        </label>
+      </div>
+      {filtered.length === 0 ? (
+        <p className="text-sm text-gray-500">No recordings match your search.</p>
+      ) : null}
       <ul className="space-y-4">
-        {recordings.map((r) => (
+        {filtered.map((r) => (
           <li key={r.id} className="card space-y-3">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="min-w-0 flex-1 space-y-1">
@@ -106,7 +168,9 @@ export default function RecordingsList({
                   </div>
                 ) : (
                   <div className="flex flex-wrap items-center gap-2">
-                    <p className="truncate font-medium text-white">{recordingDisplayLabel(r)}</p>
+                    <p className="truncate font-medium text-white">
+                      <HighlightMatches text={recordingDisplayLabel(r)} query={searchQuery} />
+                    </p>
                     <button
                       type="button"
                       onClick={() => startEdit(r)}
@@ -136,6 +200,15 @@ export default function RecordingsList({
                 <button type="button" onClick={() => void handleDownload(r)} className="btn-secondary text-xs">
                   Download
                 </button>
+                {r.transcript ? (
+                  <button
+                    type="button"
+                    onClick={() => void handleDownloadTranscript(r)}
+                    className="btn-secondary text-xs"
+                  >
+                    Download transcript
+                  </button>
+                ) : null}
                 <button
                   type="button"
                   onClick={() => onDelete(r.id)}
@@ -145,6 +218,14 @@ export default function RecordingsList({
                 </button>
               </div>
             </div>
+            {r.transcript ? (
+              <div className="rounded-lg border border-surface-700 bg-surface-950/80 p-3">
+                <p className="mb-2 text-xs font-medium uppercase tracking-wide text-gray-500">Transcript</p>
+                <p className="max-h-40 overflow-y-auto whitespace-pre-wrap text-sm leading-relaxed text-gray-200">
+                  <HighlightMatches text={r.transcript.text} query={searchQuery} />
+                </p>
+              </div>
+            ) : null}
             <RecordingAudio filePath={r.path} />
           </li>
         ))}
