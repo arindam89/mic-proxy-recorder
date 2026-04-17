@@ -1,0 +1,92 @@
+name: Build installable binaries
+
+on:
+  workflow_dispatch:
+    inputs:
+      bundle_model:
+        description: "Download and bundle a local Whisper model into assets/models"
+        required: false
+        type: boolean
+        default: false
+      model_url:
+        description: "Optional model download URL (used only when bundle_model=true)"
+        required: false
+        type: string
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build-installers:
+    name: Build on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Linux build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libgtk-3-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            patchelf
+
+      - name: Ensure app scaffold exists
+        run: |
+          if [ ! -f package.json ]; then
+            echo "Missing package.json. Add a Tauri app scaffold before running installer builds."
+            exit 1
+          fi
+          if [ ! -f src-tauri/Cargo.toml ]; then
+            echo "Missing src-tauri/Cargo.toml. Add a Tauri Rust backend before running installer builds."
+            exit 1
+          fi
+        shell: bash
+
+      - name: Install JavaScript dependencies
+        run: npm ci
+
+      - name: Optionally bundle local model
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.bundle_model }}
+        shell: bash
+        run: |
+          mkdir -p assets/models
+          MODEL_URL="${{ inputs.model_url }}"
+          if [ -z "$MODEL_URL" ]; then
+            echo "bundle_model=true but no model_url provided."
+            echo "Set model_url to a direct downloadable file URL."
+            exit 1
+          fi
+          curl -L --fail "$MODEL_URL" -o assets/models/whisper-model.bin
+
+      - name: Build installers (Tauri)
+        run: npm run tauri build
+
+      - name: Upload installers
+        uses: actions/upload-artifact@v4
+        with:
+          name: installers-${{ matrix.os }}
+          path: |
+            src-tauri/target/release/bundle/**/*.msi
+            src-tauri/target/release/bundle/**/*.dmg
+            src-tauri/target/release/bundle/**/*.AppImage
+            src-tauri/target/release/bundle/**/*.deb
+          if-no-files-found: error
