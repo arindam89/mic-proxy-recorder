@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { invoke as _tauriInvoke } from "@tauri-apps/api/tauri";
+import { invoke as _tauriInvoke } from "@tauri-apps/api/core";
 import { listen as _tauriListen } from "@tauri-apps/api/event";
 import type {
   AppSettings,

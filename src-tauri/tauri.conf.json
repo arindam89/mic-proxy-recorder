@@ -37,14 +37,12 @@
     ]
   },
   "plugins": {
-    "dialog": {},
+    "dialog": null,
     "fs": {
-      "scope": {
-        "allow": ["$APPDATA/**", "$DOCUMENT/**", "$DOWNLOAD/**", "$HOME/**", "$TEMP/**"]
-      }
+      "requireLiteralLeadingDot": false
     },
-    "global-shortcut": {},
-    "notification": {},
+    "global-shortcut": null,
+    "notification": null,
     "shell": {
       "open": true
     }
