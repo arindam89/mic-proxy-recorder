@@ -7,6 +7,7 @@ cd "$ROOT_DIR"
 AUTO_INSTALL=0
 MODE="build"
 WITH_PARAKEET_VENV=0
+WITH_BLACKHOLE_PKG=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -22,9 +23,14 @@ while [[ $# -gt 0 ]]; do
       WITH_PARAKEET_VENV=1
       shift
       ;;
+    --with-blackhole-pkg)
+      WITH_BLACKHOLE_PKG=1
+      shift
+      ;;
     --help|-h)
-      echo "Usage: $0 [--yes] [--dev] [--with-parakeet-venv]"
+      echo "Usage: $0 [--yes] [--dev] [--with-parakeet-venv] [--with-blackhole-pkg]"
       echo "  --with-parakeet-venv  Run scripts/setup-parakeet-venv.sh before the Rust build (NeMo Parakeet)."
+      echo "  --with-blackhole-pkg  Run scripts/download-blackhole-pkg.sh before Tauri pack (macOS duplex installer)."
       exit 0
       ;;
     *)
@@ -100,6 +106,14 @@ npm install || die "npm install failed"
 if [ "$WITH_PARAKEET_VENV" -eq 1 ]; then
   info "Creating Parakeet virtualenv (scripts/setup-parakeet-venv.sh)..."
   bash "$ROOT_DIR/scripts/setup-parakeet-venv.sh" || die "Parakeet venv setup failed"
+fi
+
+if [ "$WITH_BLACKHOLE_PKG" -eq 1 ]; then
+  if [[ "$(uname -s)" != "Darwin" ]]; then
+    warn "--with-blackhole-pkg is intended for macOS packagers; downloading anyway for a universal resource bundle."
+  fi
+  info "Downloading BlackHole 2ch .pkg into src-tauri/resources/blackhole/ …"
+  bash "$ROOT_DIR/scripts/download-blackhole-pkg.sh" || die "BlackHole pkg download failed"
 fi
 
 info "Building frontend (npm run build)..."

@@ -37,6 +37,8 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            blackhole_installer_state,
+            open_blackhole_installer,
             list_audio_devices,
             list_playback_devices,
             get_recording_meter,

@@ -365,6 +365,102 @@ fn append_recording_to_list(
     save_recordings_list(app, &recordings)
 }
 
+/// Pinned upstream 2ch installer (duplex virtual cable for meeting bridge).
+const BLACKHOLE_FALLBACK_DOWNLOAD_URL: &str =
+    "https://existential.audio/downloads/BlackHole2ch-0.6.1.pkg";
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BlackHoleInstallerDto {
+    pub host_platform: String,
+    /// True when a `BlackHole*.pkg` was found next to the bundled resources (maintainer pre-download).
+    pub bundled_pkg_available: bool,
+    pub bundled_pkg_name: Option<String>,
+    pub fallback_download_url: String,
+    pub upstream_home_url: String,
+}
+
+#[tauri::command]
+pub fn blackhole_installer_state(app: AppHandle) -> BlackHoleInstallerDto {
+    let host_platform = std::env::consts::OS.to_string();
+    #[cfg(target_os = "macos")]
+    let (bundled_pkg_available, bundled_pkg_name) = app
+        .path()
+        .resource_dir()
+        .ok()
+        .map(|root| root.join("blackhole"))
+        .and_then(|dir| {
+            find_blackhole_pkg(&dir).map(|p| {
+                (
+                    true,
+                    p.file_name()
+                        .and_then(|s| s.to_str())
+                        .map(std::string::ToString::to_string),
+                )
+            })
+        })
+        .unwrap_or((false, None));
+    #[cfg(not(target_os = "macos"))]
+    let (bundled_pkg_available, bundled_pkg_name) = (false, None);
+
+    BlackHoleInstallerDto {
+        host_platform,
+        bundled_pkg_available,
+        bundled_pkg_name,
+        fallback_download_url: BLACKHOLE_FALLBACK_DOWNLOAD_URL.into(),
+        upstream_home_url: "https://existential.audio/blackhole/".into(),
+    }
+}
+
+/// Opens the bundled BlackHole `.pkg` with the system installer when present; otherwise opens the official download URL (macOS `open`).
+#[tauri::command]
+pub fn open_blackhole_installer(app: AppHandle) -> Result<(), String> {
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = app;
+        return Err(
+            "BlackHole is macOS-only. For Windows duplex routing use VB-Audio Virtual Cable; see specs/VIRTUAL_AUDIO.md.".into(),
+        );
+    }
+    #[cfg(target_os = "macos")]
+    {
+        let dir = app
+            .path()
+            .resource_dir()
+            .map_err(|e| e.to_string())?
+            .join("blackhole");
+        let target = if let Some(pkg) = find_blackhole_pkg(&dir) {
+            pkg.to_string_lossy().into_owned()
+        } else {
+            BLACKHOLE_FALLBACK_DOWNLOAD_URL.into()
+        };
+        macos_open(&target)
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn macos_open(path_or_url: &str) -> Result<(), String> {
+    std::process::Command::new("open")
+        .arg(path_or_url)
+        .spawn()
+        .map_err(|e| format!("Failed to launch installer or download (open): {}", e))?;
+    Ok(())
+}
+
+fn find_blackhole_pkg(dir: &Path) -> Option<PathBuf> {
+    let rd = std::fs::read_dir(dir).ok()?;
+    let mut found: Vec<PathBuf> = Vec::new();
+    for e in rd.flatten() {
+        let p = e.path();
+        let name = p.file_name()?.to_str()?.to_ascii_lowercase();
+        if name.ends_with(".pkg") && name.contains("blackhole") {
+            found.push(p);
+        }
+    }
+    found.sort();
+    found.into_iter().next()
+}
+
 fn project_root_dev() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("..")
 }

@@ -13,6 +13,8 @@ This repo is a Tauri desktop application (Rust backend + React frontend) that pr
 5. In **Google Meet**, set **both** the **microphone** and the **speaker** to that same virtual device. If Meet’s speaker is still your built-in speakers while the mic is BlackHole, you will get echo/feedback.
 6. Click **Stop meeting bridge** when the call ends; transcribe or download from the meeting card or **Recordings**.
 
+**Optional embedded installer (maintainers / CI):** run `bash scripts/download-blackhole-pkg.sh` before `npm run tauri -- build` so `BlackHole2ch-0.6.1.pkg` is copied into the app bundle; the Recorder screen then offers **Install BlackHole** on macOS. Details: **`specs/BLACKHOLE_BUNDLE.md`**. Or use **scripts/build.sh --with-blackhole-pkg** before packaging.
+
 See **`specs/VIRTUAL_AUDIO.md`** and **`specs/RELAY_HUB_ARCHITECTURE.md`** for routing diagrams and edge cases.
 
 ## Prerequisites

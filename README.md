@@ -2,7 +2,7 @@
 
 A native cross-platform app for **local** microphone capture, optional noise cancellation, **meeting bridge** (duplex relay: your mic → virtual cable for Meet; Meet’s playback from that cable → your real speakers; **stereo** WAV with you on the left and remote on the right — see [BlackHole](https://existential.audio/blackhole/)), WAV recording, and offline speech-to-text (Whisper or Parakeet).
 
-Install **BlackHole** (or similar) once. In Meet, set **both** microphone and speaker to that cable so the full call path goes through the app and avoids speaker→mic feedback. The app does not ship its own kernel driver.
+Install **BlackHole** (or similar) once. In Meet, set **both** microphone and speaker to that cable so the full call path goes through the app and avoids speaker→mic feedback. The app does not ship its own kernel driver; release builds **can** embed Existential Audio’s official `.pkg` via `scripts/download-blackhole-pkg.sh` (see **`specs/BLACKHOLE_BUNDLE.md`**). The meeting UI on macOS can open that installer or the download URL.
 
 ## Selected foundation
 

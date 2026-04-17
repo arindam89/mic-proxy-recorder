@@ -6,6 +6,7 @@ import {
   recordingExportBasename,
   type AppSettings,
   type AudioDevice,
+  type BlackHoleInstallerState,
   type Recording,
   type RecordingStatus,
   type Transcript,
@@ -55,6 +56,34 @@ export default function App() {
   const [renamingCurrent, setRenamingCurrent] = useState(false);
   const [renameDraft, setRenameDraft] = useState("");
   const [renameSaving, setRenameSaving] = useState(false);
+  const [blackHoleInstaller, setBlackHoleInstaller] = useState<BlackHoleInstallerState | null>(null);
+
+  const refreshAudioDevices = useCallback(async () => {
+    if (!isTauri()) return;
+    try {
+      const [inputs, outputs] = await Promise.all([
+        invoke<AudioDevice[]>("list_audio_devices"),
+        invoke<AudioDevice[]>("list_playback_devices"),
+      ]);
+      setDevices(inputs);
+      setPlaybackDevices(outputs);
+    } catch (e) {
+      setErrorMessage(String(e));
+    }
+  }, []);
+
+  const handleOpenBlackHoleInstaller = useCallback(async () => {
+    if (!isTauri()) return;
+    setErrorMessage(null);
+    try {
+      await invoke("open_blackhole_installer");
+      const st = await invoke<BlackHoleInstallerState>("blackhole_installer_state");
+      setBlackHoleInstaller(st);
+      await refreshAudioDevices();
+    } catch (e) {
+      setErrorMessage(String(e));
+    }
+  }, [refreshAudioDevices]);
 
   useEffect(() => {
     invoke<AudioDevice[]>("list_audio_devices")
@@ -80,6 +109,10 @@ export default function App() {
         }))
       )
       .catch(console.error);
+
+    invoke<BlackHoleInstallerState>("blackhole_installer_state")
+      .then(setBlackHoleInstaller)
+      .catch(() => setBlackHoleInstaller(null));
   }, []);
 
   useEffect(() => {
@@ -375,6 +408,9 @@ export default function App() {
                 onBridgeOutputIdChange={setBridgeOutputId}
                 bridgeSpeakersOutputId={bridgeSpeakersOutputId}
                 onBridgeSpeakersOutputIdChange={setBridgeSpeakersOutputId}
+                blackHoleInstaller={blackHoleInstaller}
+                onRefreshAudioDevices={() => void refreshAudioDevices()}
+                onOpenBlackHoleInstaller={() => void handleOpenBlackHoleInstaller()}
                 noiseCancelEnabled={settings.noise_cancel_enabled}
                 noiseCancelLevel={settings.noise_cancel_level}
                 meetingBridgeActive={meetingBridgeActive}

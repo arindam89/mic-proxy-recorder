@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import type { AudioDevice } from "../types";
+import type { AudioDevice, BlackHoleInstallerState } from "../types";
 
 interface Props {
   inputDevices: AudioDevice[];
@@ -11,6 +11,10 @@ interface Props {
   /** Real speakers/headphones; `null` = system default output. */
   bridgeSpeakersOutputId: string | null;
   onBridgeSpeakersOutputIdChange: (id: string | null) => void;
+  blackHoleInstaller: BlackHoleInstallerState | null;
+  onRefreshAudioDevices: () => void;
+  /** Opens bundled `.pkg` when present, else official download URL (macOS only). */
+  onOpenBlackHoleInstaller: () => void | Promise<void>;
   noiseCancelEnabled: boolean;
   noiseCancelLevel: string;
   meetingBridgeActive: boolean;
@@ -27,6 +31,9 @@ export default function MeetingBridgePanel({
   onBridgeOutputIdChange,
   bridgeSpeakersOutputId,
   onBridgeSpeakersOutputIdChange,
+  blackHoleInstaller,
+  onRefreshAudioDevices,
+  onOpenBlackHoleInstaller,
   noiseCancelEnabled,
   noiseCancelLevel,
   meetingBridgeActive,
@@ -35,6 +42,7 @@ export default function MeetingBridgePanel({
   onStop,
 }: Props) {
   const [hintDismissed, setHintDismissed] = useState(false);
+  const [blackHoleHint, setBlackHoleHint] = useState(false);
 
   /** Virtual cable must be capturable as Meet "speakers" → needs same name in input + output lists. */
   const duplexCableDevices = useMemo(
@@ -132,6 +140,65 @@ export default function MeetingBridgePanel({
           )}
         </select>
       </label>
+
+      {blackHoleInstaller?.hostPlatform === "macos" ? (
+        <div className="space-y-2 rounded-lg border border-surface-600 bg-surface-800/40 px-2 py-2">
+          <p className="text-[11px] leading-snug text-gray-400">
+            The app cannot load a driver by itself. Maintainer builds can embed the official{" "}
+            <strong>BlackHole 2ch</strong> <code className="text-[10px] text-gray-300">.pkg</code> (see{" "}
+            <code className="text-[10px] text-gray-300">scripts/download-blackhole-pkg.sh</code> and{" "}
+            <code className="text-[10px] text-gray-300">specs/BLACKHOLE_BUNDLE.md</code>). After install, set{" "}
+            <strong>Meet mic + Meet speaker</strong> to BlackHole, then <strong>Refresh devices</strong>.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              className="rounded-lg border border-primary-700/60 bg-primary-950/40 px-3 py-1.5 text-xs font-medium text-primary-100 hover:bg-primary-900/50 disabled:opacity-40"
+              disabled={meetingBridgeActive}
+              onClick={() => {
+                void (async () => {
+                  await onOpenBlackHoleInstaller();
+                  setBlackHoleHint(true);
+                })();
+              }}
+            >
+              {blackHoleInstaller.bundledPkgAvailable
+                ? `Install BlackHole (${blackHoleInstaller.bundledPkgName ?? "bundled .pkg"})`
+                : "Download BlackHole installer"}
+            </button>
+            <button
+              type="button"
+              className="rounded-lg border border-surface-500 px-3 py-1.5 text-xs text-gray-200 hover:bg-surface-700 disabled:opacity-40"
+              disabled={meetingBridgeActive}
+              onClick={() => {
+                onRefreshAudioDevices();
+                setBlackHoleHint(false);
+              }}
+            >
+              Refresh devices
+            </button>
+            <a
+              href={blackHoleInstaller.upstreamHomeUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center rounded-lg border border-transparent px-2 py-1.5 text-xs text-primary-400 hover:text-primary-300"
+            >
+              BlackHole site
+            </a>
+          </div>
+          {blackHoleHint ? (
+            <p className="text-[11px] text-amber-200/90">
+              Complete Apple&apos;s installer (reboot if it asks). Then click <strong>Refresh devices</strong> and pick
+              BlackHole above. In Meet, set both microphone and speaker to BlackHole.
+            </p>
+          ) : null}
+        </div>
+      ) : blackHoleInstaller && blackHoleInstaller.hostPlatform !== "macos" ? (
+        <p className="text-[11px] text-gray-500">
+          Bundled BlackHole flow is for macOS. On other platforms use a virtual cable documented in{" "}
+          <code className="text-[10px]">specs/VIRTUAL_AUDIO.md</code>.
+        </p>
+      ) : null}
 
       <label className="flex flex-col gap-1">
         <span className="text-xs text-gray-500">Hear the call on (real speakers / headphones)</span>

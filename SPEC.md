@@ -116,6 +116,12 @@ Returns all available microphone inputs.
 ### `list_playback_devices() → AudioDevice[]`
 Returns playback (output) devices from the OS — used in Settings as a reference for virtual routing docs.
 
+### `blackhole_installer_state() → BlackHoleInstallerDto`
+Returns host OS (`std::env::consts::OS`), whether a `BlackHole*.pkg` was found under the app **resource** directory `blackhole/` (maintainer pre-download before `tauri build`), and canonical URLs. Used by the meeting-bridge UI on macOS.
+
+### `open_blackhole_installer() → void` (errors on non-macOS)
+macOS: opens the bundled `BlackHole*.pkg` with `open` when present in resources; otherwise opens the official HTTPS download for the pinned 2ch package. Does not perform silent install (user completes Apple’s installer). Non-macOS returns an error pointing to `specs/VIRTUAL_AUDIO.md`.
+
 ### `get_recording_meter() → { peak: number }`
 While a normal recording **or** meeting bridge is active, returns a normalized **0..1** peak level from the last input buffer (UI applies decay). Errors if neither is active.
 

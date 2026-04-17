@@ -1,5 +1,7 @@
 node_modules/
 dist/
 src-tauri/target/
+# Optional BlackHole installer (run scripts/download-blackhole-pkg.sh before packaging)
+src-tauri/resources/blackhole/*.pkg
 .venv-parakeet/
 scripts/__pycache__/

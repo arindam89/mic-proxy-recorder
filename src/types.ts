@@ -4,6 +4,15 @@ export interface AudioDevice {
   is_default: boolean;
 }
 
+/** Rust `blackhole_installer_state` — macOS virtual cable helper. */
+export interface BlackHoleInstallerState {
+  hostPlatform: string;
+  bundledPkgAvailable: boolean;
+  bundledPkgName: string | null;
+  fallbackDownloadUrl: string;
+  upstreamHomeUrl: string;
+}
+
 export type RecordingStatus = "idle" | "recording" | "paused" | "processing" | "bridge";
 
 export type TranscriptionStatus = "idle" | "transcribing" | "done" | "error";

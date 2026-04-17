@@ -1,6 +1,6 @@
 # Virtual microphone, speaker capture, and Zoom
 
-This application **does not install a macOS CoreAudio driver**. It uses **cpal** for the **meeting bridge**: a **duplex relay** — physical mic → virtual cable playback (Meet mic), virtual cable capture (Meet speakers) → physical speakers — plus a **stereo** recording (L = you, R = Meet). See [BlackHole](https://existential.audio/blackhole/) and **`specs/RELAY_HUB_ARCHITECTURE.md`**.
+This application **does not install a macOS CoreAudio driver**. It uses **cpal** for the **meeting bridge**: a **duplex relay** — physical mic → virtual cable playback (Meet mic), virtual cable capture (Meet speakers) → physical speakers — plus a **stereo** recording (L = you, R = Meet). See [BlackHole](https://existential.audio/blackhole/), **`specs/RELAY_HUB_ARCHITECTURE.md`**, and **`specs/BLACKHOLE_BUNDLE.md`** (optional bundled `.pkg` for releases).
 
 ## Meeting bridge (duplex call flow)
 
