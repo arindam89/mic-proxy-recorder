@@ -11,7 +11,7 @@ use cpal::traits::{DeviceTrait, StreamTrait};
 use cpal::{SampleFormat, SampleRate, StreamConfig};
 use hound::{WavSpec, WavWriter};
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use uuid::Uuid;
@@ -21,8 +21,42 @@ pub struct Recording {
     pub id: String,
     pub path: String,
     pub filename: String,
+    /// User-visible label (timestamp + path hint by default). Stored in recordings.json.
+    #[serde(default)]
+    pub display_name: String,
     pub duration_secs: u32,
     pub created_at: String,
+}
+
+/// Default label: last path segments under the recordings folder + local timestamp, e.g.
+/// `com_micproxyrecorder_app_recordings_2026-04-17_20-30-45`.
+pub fn default_display_name_for_dir(recordings_dir: &Path) -> String {
+    let segments: Vec<String> = recordings_dir
+        .iter()
+        .rev()
+        .take(3)
+        .filter_map(|c| {
+            c.to_str().map(|s| {
+                s.chars()
+                    .map(|ch| {
+                        if ch.is_ascii_alphanumeric() || ch == '-' || ch == '_' {
+                            ch
+                        } else {
+                            '_'
+                        }
+                    })
+                    .collect::<String>()
+            })
+        })
+        .collect();
+    let path_hint = segments.into_iter().rev().filter(|s| !s.is_empty()).collect::<Vec<_>>().join("_");
+    let path_part = if path_hint.is_empty() {
+        "recording".to_string()
+    } else {
+        path_hint
+    };
+    let ts = Utc::now().format("%Y-%m-%d_%H-%M-%S");
+    format!("{}_{}", path_part, ts)
 }
 
 // WavWriter<BufWriter<File>> is not Send, so we wrap it.
@@ -164,12 +198,16 @@ pub fn start_recording(
 
     stream.play().context("Failed to start audio stream")?;
 
+    let created_at = Utc::now().to_rfc3339();
+    let display_name = default_display_name_for_dir(&recordings_dir);
+
     let recording = Recording {
         id,
         path: path.to_string_lossy().into_owned(),
         filename,
+        display_name,
         duration_secs: 0,
-        created_at: Utc::now().to_rfc3339(),
+        created_at,
     };
 
     Ok(RecorderHandle {

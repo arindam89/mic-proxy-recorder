@@ -12,8 +12,22 @@ export interface Recording {
   id: string;
   path: string;
   filename: string;
+  /** User-visible name (default includes path hint + timestamp). */
+  display_name?: string;
   duration_secs: number;
   created_at: string;
+}
+
+export function recordingDisplayLabel(r: Recording): string {
+  const d = r.display_name?.trim();
+  if (d) return d;
+  return r.filename.replace(/\.wav$/i, "") || r.filename;
+}
+
+/** Safe basename for Save dialog default (no path separators). */
+export function recordingExportBasename(r: Recording): string {
+  const s = recordingDisplayLabel(r).replace(/[/\\?%*:|"<>]/g, "_").trim();
+  return s.slice(0, 120) || "recording";
 }
 
 export interface Transcript {

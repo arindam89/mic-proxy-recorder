@@ -1,18 +1,22 @@
 import { useCallback, useEffect, useState } from "react";
 import { invoke as _tauriInvoke, isTauri } from "@tauri-apps/api/core";
 import { listen as _tauriListen } from "@tauri-apps/api/event";
-import type {
-  AppSettings,
-  AudioDevice,
-  Recording,
-  RecordingStatus,
-  Transcript,
-  TranscriptionStatus,
+import {
+  recordingDisplayLabel,
+  recordingExportBasename,
+  type AppSettings,
+  type AudioDevice,
+  type Recording,
+  type RecordingStatus,
+  type Transcript,
+  type TranscriptionStatus,
 } from "./types";
 import DeviceSelector from "./components/DeviceSelector";
 import RecorderControls from "./components/RecorderControls";
 import NoiseCancelPanel from "./components/NoiseCancelPanel";
 import TranscriptPane from "./components/TranscriptPane";
+import { save } from "@tauri-apps/plugin-dialog";
+import RecordingAudio from "./components/RecordingAudio";
 import RecordingsList from "./components/RecordingsList";
 import SettingsPanel from "./components/SettingsPanel";
 import StatusBar from "./components/StatusBar";
@@ -37,6 +41,9 @@ export default function App() {
   const [transcript, setTranscript] = useState<Transcript | null>(null);
   const [transcriptionStatus, setTranscriptionStatus] = useState<TranscriptionStatus>("idle");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [renamingCurrent, setRenamingCurrent] = useState(false);
+  const [renameDraft, setRenameDraft] = useState("");
+  const [renameSaving, setRenameSaving] = useState(false);
 
   useEffect(() => {
     invoke<AudioDevice[]>("list_audio_devices")
@@ -102,6 +109,8 @@ export default function App() {
     try {
       const rec = await invoke<Recording>("stop_recording");
       setCurrentRecording(rec);
+      setRenamingCurrent(false);
+      setRenameDraft("");
       setStatus("idle");
       setRecordingTime(0);
       setRecordings((prev) => [rec, ...prev]);
@@ -148,6 +157,59 @@ export default function App() {
       setErrorMessage(String(e));
     }
   }, []);
+
+  const handleRenameRecording = useCallback(async (id: string, displayName: string) => {
+    try {
+      const updated = await invoke<Recording>("rename_recording", {
+        recordingId: id,
+        displayName,
+      });
+      setRecordings((prev) => prev.map((r) => (r.id === id ? updated : r)));
+      setCurrentRecording((cur) => (cur && cur.id === id ? updated : cur));
+    } catch (e) {
+      setErrorMessage(String(e));
+    }
+  }, []);
+
+  const handleExportRecording = useCallback(async (recordingPath: string, destinationPath: string) => {
+    try {
+      await invoke("export_recording", { recordingPath, destinationPath });
+    } catch (e) {
+      setErrorMessage(String(e));
+    }
+  }, []);
+
+  const handleDownloadCurrentRecording = useCallback(async () => {
+    if (!currentRecording) return;
+    try {
+      const dest = await save({
+        defaultPath: `${recordingExportBasename(currentRecording)}.wav`,
+        filters: [{ name: "WAV Audio", extensions: ["wav"] }],
+      });
+      if (dest) await handleExportRecording(currentRecording.path, dest);
+    } catch (e) {
+      setErrorMessage(String(e));
+    }
+  }, [currentRecording, handleExportRecording]);
+
+  const beginRenameCurrent = useCallback(() => {
+    if (!currentRecording) return;
+    setRenameDraft(recordingDisplayLabel(currentRecording));
+    setRenamingCurrent(true);
+  }, [currentRecording]);
+
+  const saveRenameCurrent = useCallback(async () => {
+    if (!currentRecording) return;
+    const trimmed = renameDraft.trim();
+    if (!trimmed) return;
+    setRenameSaving(true);
+    try {
+      await handleRenameRecording(currentRecording.id, trimmed);
+      setRenamingCurrent(false);
+    } finally {
+      setRenameSaving(false);
+    }
+  }, [currentRecording, renameDraft, handleRenameRecording]);
 
   const handleSaveSettings = useCallback(async (newSettings: AppSettings) => {
     setSettings(newSettings);
@@ -212,22 +274,82 @@ export default function App() {
 
             <div className="flex flex-1 flex-col gap-4">
               {currentRecording && (
-                <div className="card flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium">{currentRecording.filename}</p>
-                    <p className="text-xs text-gray-400">
-                      {status === "idle" ? "Ready to transcribe" : "Recording\u2026"}
-                    </p>
+                <div className="card space-y-3">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="min-w-0 flex-1 space-y-2">
+                      {status === "idle" && renamingCurrent ? (
+                        <div className="flex flex-wrap items-center gap-2">
+                          <input
+                            type="text"
+                            value={renameDraft}
+                            onChange={(e) => setRenameDraft(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") void saveRenameCurrent();
+                              if (e.key === "Escape") {
+                                setRenamingCurrent(false);
+                              }
+                            }}
+                            className="min-w-[10rem] flex-1 rounded-lg border border-surface-600 bg-surface-900 px-2 py-1 text-sm text-white"
+                            autoFocus
+                            disabled={renameSaving}
+                          />
+                          <button
+                            type="button"
+                            className="btn-primary text-xs"
+                            disabled={renameSaving || !renameDraft.trim()}
+                            onClick={() => void saveRenameCurrent()}
+                          >
+                            {renameSaving ? "Saving\u2026" : "Save"}
+                          </button>
+                          <button
+                            type="button"
+                            className="btn-secondary text-xs"
+                            disabled={renameSaving}
+                            onClick={() => setRenamingCurrent(false)}
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="text-sm font-medium">{recordingDisplayLabel(currentRecording)}</p>
+                          {status === "idle" && (
+                            <button
+                              type="button"
+                              onClick={beginRenameCurrent}
+                              className="text-xs text-primary-400 hover:text-primary-300"
+                            >
+                              Rename
+                            </button>
+                          )}
+                        </div>
+                      )}
+                      <p className="text-xs text-gray-500">{currentRecording.filename}</p>
+                      <p className="text-xs text-gray-400">
+                        {status === "idle" ? "Ready to transcribe or play back" : "Recording\u2026"}
+                      </p>
+                    </div>
+                    {status === "idle" && !renamingCurrent && (
+                      <div className="flex shrink-0 flex-wrap gap-2">
+                        <button
+                          type="button"
+                          className="btn-secondary text-sm"
+                          onClick={() => void handleDownloadCurrentRecording()}
+                        >
+                          Download
+                        </button>
+                        <button
+                          type="button"
+                          className="btn-primary text-sm"
+                          onClick={() => handleTranscribe(currentRecording)}
+                          disabled={transcriptionStatus === "transcribing"}
+                        >
+                          {transcriptionStatus === "transcribing" ? "Transcribing\u2026" : "Transcribe"}
+                        </button>
+                      </div>
+                    )}
                   </div>
-                  {status === "idle" && (
-                    <button
-                      className="btn-primary"
-                      onClick={() => handleTranscribe(currentRecording)}
-                      disabled={transcriptionStatus === "transcribing"}
-                    >
-                      {transcriptionStatus === "transcribing" ? "Transcribing\u2026" : "Transcribe"}
-                    </button>
-                  )}
+                  {status === "idle" && <RecordingAudio filePath={currentRecording.path} />}
                 </div>
               )}
               <TranscriptPane transcript={transcript} status={transcriptionStatus} />
@@ -240,7 +362,8 @@ export default function App() {
             recordings={recordings}
             onTranscribe={handleTranscribe}
             onDelete={handleDeleteRecording}
-            activeTranscript={transcript}
+            onRename={handleRenameRecording}
+            onExportRecording={handleExportRecording}
             transcriptionStatus={transcriptionStatus}
           />
         )}

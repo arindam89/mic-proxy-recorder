@@ -74,6 +74,13 @@ The Tauri config is in `src-tauri/tauri.conf.json` and the frontend build output
 
 Start and stop return the active `Recording` from the Rust backend immediately, so the red indicator, timer, and Stop / Pause controls stay in sync. The timer only advances while status is **recording** (it pauses when you pause). If you previously saw “Already recording” while the UI still showed **Record**, that was a race where the `recording-started` event could fire before the event listener finished registering; the command return value fixes that.
 
+### Names, playback, download, rename
+
+- Each new take gets a **display name** derived from the last few folders of the recordings directory plus a **UTC timestamp** (for example `com_micproxyrecorder_app_recordings_2026-04-17_20-30-45`). The on-disk file remains a stable `recording-{uuid}.wav` name.
+- After **Stop**, use the built-in **audio player** on the Recorder screen or open **Recordings** for the same controls on every clip.
+- **Download** copies the WAV to a path you choose (default filename uses the display name).
+- **Rename** edits only the display name (safe for transcription paths); use **Rename** on the Recorder card or on each row in **Recordings**.
+
 ### Whisper (bundled whisper.cpp)
 
 1. Download a GGUF or compatible `.bin` model (see Settings in the app for a link).

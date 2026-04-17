@@ -152,6 +152,43 @@ pub async fn delete_recording(
 }
 
 #[tauri::command]
+pub async fn rename_recording(
+    app: AppHandle,
+    recording_id: String,
+    display_name: String,
+) -> Result<crate::audio::recorder::Recording, String> {
+    let name = display_name.trim();
+    if name.is_empty() {
+        return Err("Name cannot be empty".into());
+    }
+    if name.contains('/') || name.contains('\\') || name.contains('\0') {
+        return Err("Name cannot contain path separators".into());
+    }
+    let mut recordings = load_recordings_list(&app).map_err(|e| e.to_string())?;
+    let pos = recordings
+        .iter()
+        .position(|r| r.id == recording_id)
+        .ok_or_else(|| "Recording not found".to_string())?;
+    recordings[pos].display_name = name.to_string();
+    save_recordings_list(&app, &recordings).map_err(|e| e.to_string())?;
+    Ok(recordings[pos].clone())
+}
+
+#[tauri::command]
+pub async fn export_recording(
+    recording_path: String,
+    destination_path: String,
+) -> Result<(), String> {
+    let src = std::path::Path::new(&recording_path);
+    let dst = std::path::Path::new(&destination_path);
+    if let Some(parent) = dst.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    std::fs::copy(src, dst).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
 pub async fn get_settings(state: State<'_, AppStateHandle>) -> Result<Settings, String> {
     let s = state.lock().await;
     Ok(s.settings.clone())
@@ -188,7 +225,17 @@ fn load_recordings_list(app: &AppHandle) -> anyhow::Result<Vec<crate::audio::rec
         return Ok(Vec::new());
     }
     let json = std::fs::read_to_string(path)?;
-    Ok(serde_json::from_str(&json)?)
+    let mut list: Vec<crate::audio::recorder::Recording> = serde_json::from_str(&json)?;
+    for r in &mut list {
+        if r.display_name.trim().is_empty() {
+            r.display_name = r
+                .filename
+                .strip_suffix(".wav")
+                .unwrap_or(&r.filename)
+                .to_string();
+        }
+    }
+    Ok(list)
 }
 
 fn save_recordings_list(

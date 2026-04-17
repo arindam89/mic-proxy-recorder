@@ -29,6 +29,8 @@ pub fn run() {
             transcribe_recording,
             list_recordings,
             delete_recording,
+            rename_recording,
+            export_recording,
             get_settings,
             save_settings,
         ])
