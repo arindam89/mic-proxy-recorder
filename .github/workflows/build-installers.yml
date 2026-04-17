@@ -16,10 +16,14 @@ on:
     branches: [main]
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
   build-installers:
     name: Build on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
+    if: ${{ hashFiles('package.json') != '' && hashFiles('src-tauri/Cargo.toml') != '' }}
     strategy:
       fail-fast: false
       matrix:
@@ -49,18 +53,6 @@ jobs:
             librsvg2-dev \
             patchelf
 
-      - name: Ensure app scaffold exists
-        run: |
-          if [ ! -f package.json ]; then
-            echo "Missing package.json. Add a Tauri app scaffold before running installer builds."
-            exit 1
-          fi
-          if [ ! -f src-tauri/Cargo.toml ]; then
-            echo "Missing src-tauri/Cargo.toml. Add a Tauri Rust backend before running installer builds."
-            exit 1
-          fi
-        shell: bash
-
       - name: Install JavaScript dependencies
         run: npm ci
 
@@ -75,7 +67,10 @@ jobs:
             echo "Set model_url to a direct downloadable file URL."
             exit 1
           fi
-          curl -L --fail "$MODEL_URL" -o assets/models/whisper-model.bin
+          if ! curl -L --fail "$MODEL_URL" -o assets/models/whisper-model.bin; then
+            echo "Failed to download model from $MODEL_URL"
+            exit 1
+          fi
 
       - name: Build installers (Tauri)
         run: npm run tauri build
