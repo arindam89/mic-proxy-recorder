@@ -5,8 +5,12 @@ interface Props {
   inputDevices: AudioDevice[];
   playbackDevices: AudioDevice[];
   physicalInputId: string | null;
+  /** Virtual cable: playback side (Meet reads as mic) + same name as input (Meet plays here). */
   bridgeOutputId: string;
   onBridgeOutputIdChange: (id: string) => void;
+  /** Real speakers/headphones; `null` = system default output. */
+  bridgeSpeakersOutputId: string | null;
+  onBridgeSpeakersOutputIdChange: (id: string | null) => void;
   noiseCancelEnabled: boolean;
   noiseCancelLevel: string;
   meetingBridgeActive: boolean;
@@ -21,6 +25,8 @@ export default function MeetingBridgePanel({
   physicalInputId,
   bridgeOutputId,
   onBridgeOutputIdChange,
+  bridgeSpeakersOutputId,
+  onBridgeSpeakersOutputIdChange,
   noiseCancelEnabled,
   noiseCancelLevel,
   meetingBridgeActive,
@@ -41,13 +47,19 @@ export default function MeetingBridgePanel({
     inputDevices.find((d) => d.is_default)?.name ??
     "Default microphone";
 
+  const speakersLabel =
+    bridgeSpeakersOutputId == null
+      ? "Default output (system speakers / headphones)"
+      : (playbackDevices.find((d) => d.id === bridgeSpeakersOutputId)?.name ?? bridgeSpeakersOutputId);
+
   return (
     <div className="card space-y-3 border border-primary-900/40 bg-surface-900/40">
       <div>
-        <h3 className="text-sm font-semibold text-white">Meeting bridge</h3>
+        <h3 className="text-sm font-semibold text-white">Meeting bridge (duplex relay)</h3>
         <p className="mt-1 text-xs text-gray-400">
-          Send your <span className="text-gray-300">real microphone</span> (left) to a{" "}
-          <span className="text-gray-300">playback device</span> such as{" "}
+          Full call path runs through this app so you can record it: your{" "}
+          <span className="text-gray-300">real microphone</span> is sent to a{" "}
+          <span className="text-gray-300">virtual cable</span> (e.g.{" "}
           <a
             href="https://existential.audio/blackhole/"
             target="_blank"
@@ -56,26 +68,31 @@ export default function MeetingBridgePanel({
           >
             BlackHole
           </a>
-          . In Google Meet, choose that same device as the <span className="text-gray-300">microphone</span>. This app
-          records your voice to a local WAV while the bridge runs. One-time install of BlackHole is required — the app
-          cannot create a macOS driver by itself.
+          ) for Meet/Zoom to use as the <span className="text-gray-300">microphone</span>. Meet&apos;s{" "}
+          <span className="text-gray-300">speaker</span> must be the <strong>same</strong> cable so remote audio does
+          not leak into your room mic (feedback). The app plays that virtual capture to your{" "}
+          <span className="text-gray-300">real speakers</span>           and writes a <strong>stereo</strong> WAV (left = you,
+          right = Meet). One-time BlackHole install required — the app does not ship a macOS driver. Architecture:{" "}
+          <code className="rounded bg-surface-800 px-1 text-[11px] text-primary-200">specs/RELAY_HUB_ARCHITECTURE.md</code>.
         </p>
       </div>
 
       {!hintDismissed && (
-        <div className="flex justify-between gap-2 rounded-lg bg-surface-800 px-2 py-1.5 text-xs text-gray-400">
+        <div className="flex justify-between gap-2 rounded-lg bg-amber-950/40 px-2 py-1.5 text-xs text-amber-100/90">
           <span>
-            Mic in use: <span className="text-gray-200">{physicalLabel}</span> (same as Recorder input). Denoise:{" "}
+            In Meet: set <strong>both</strong> mic and speaker to the virtual cable. Mic in app:{" "}
+            <span className="text-white">{physicalLabel}</span>. Hear call on:{" "}
+            <span className="text-white">{speakersLabel}</span>. Denoise:{" "}
             {noiseCancelEnabled ? noiseCancelLevel : "off"}.
           </span>
-          <button type="button" className="shrink-0 text-gray-500 hover:text-gray-300" onClick={() => setHintDismissed(true)}>
+          <button type="button" className="shrink-0 text-amber-200/70 hover:text-amber-100" onClick={() => setHintDismissed(true)}>
             Dismiss
           </button>
         </div>
       )}
 
       <label className="flex flex-col gap-1">
-        <span className="text-xs text-gray-500">To Meet / Zoom (playback device)</span>
+        <span className="text-xs text-gray-500">Virtual cable (Meet mic + Meet speakers)</span>
         <select
           value={bridgeOutputId}
           onChange={(e) => onBridgeOutputIdChange(e.target.value)}
@@ -92,6 +109,27 @@ export default function MeetingBridgePanel({
               </option>
             ))
           )}
+        </select>
+      </label>
+
+      <label className="flex flex-col gap-1">
+        <span className="text-xs text-gray-500">Hear the call on (real speakers / headphones)</span>
+        <select
+          value={bridgeSpeakersOutputId ?? ""}
+          onChange={(e) => {
+            const v = e.target.value;
+            onBridgeSpeakersOutputIdChange(v === "" ? null : v);
+          }}
+          disabled={meetingBridgeActive}
+          className="rounded-lg border border-surface-600 bg-surface-900 px-2 py-2 text-sm text-white disabled:opacity-50"
+        >
+          <option value="">Default (system output)</option>
+          {playbackDevices.map((d) => (
+            <option key={`spk-${d.id}`} value={d.id}>
+              {d.name}
+              {d.is_default ? " (default output)" : ""}
+            </option>
+          ))}
         </select>
       </label>
 

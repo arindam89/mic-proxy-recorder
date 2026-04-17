@@ -1,8 +1,9 @@
-//! Route the physical microphone (optional denoise) to a **playback** device such as
-//! [BlackHole](https://existential.audio/blackhole/) so Meet/Zoom can select that device
-//! as the microphone, while writing the same audio to a local mono WAV.
+//! Duplex **relay hub**: physical mic → virtual playback (Meet mic), virtual capture
+//! (Meet speakers) → physical speakers, plus **stereo WAV** (L = you, R = Meet).
 //!
-//! This does **not** install a driver; the user installs BlackHole (or similar) once.
+//! Requires a virtual cable (e.g. [BlackHole](https://existential.audio/blackhole/)).
+//! In Meet, set **both** microphone and speaker to that cable to avoid acoustic feedback.
+//! See `specs/RELAY_HUB_ARCHITECTURE.md`.
 
 use crate::audio::capture::{get_input_device, get_output_device};
 use crate::audio::processor::{
@@ -12,7 +13,7 @@ use crate::audio::recorder::{default_display_name_for_dir, Recording};
 use anyhow::{Context, Result};
 use chrono::Utc;
 use cpal::traits::{DeviceTrait, StreamTrait};
-use cpal::{SampleFormat, SampleRate, SizedSample, StreamConfig};
+use cpal::{SampleFormat, SampleRate, StreamConfig};
 use hound::{SampleFormat as HoundSampleFormat, WavSpec, WavWriter};
 use std::collections::VecDeque;
 use std::path::PathBuf;
@@ -20,19 +21,27 @@ use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
 
 const RING_CAP: usize = 48000 * 3;
+/// Stereo WAV sample rate (fixed pairing rate).
+const WAV_SR: u32 = 48000;
+const REMOTE_CAP: usize = 48000 * 2;
 
-struct SendWavWriter(WavWriter<std::io::BufWriter<std::fs::File>>);
-unsafe impl Send for SendWavWriter {}
+struct SendStereoWavWriter(WavWriter<std::io::BufWriter<std::fs::File>>);
+unsafe impl Send for SendStereoWavWriter {}
 
-struct BridgeShared {
-    ring: Mutex<VecDeque<f32>>,
-    writer: Mutex<Option<SendWavWriter>>,
+struct DuplexShared {
+    /// Mic (processed) → virtual **playback** (Meet reads as mic).
+    to_meet_ring: Arc<Mutex<VecDeque<f32>>>,
+    /// Virtual capture (Meet playback) → physical speakers.
+    to_speaker_ring: Arc<Mutex<VecDeque<f32>>>,
+    /// Meet side at WAV_SR for stereo R channel (paired in mic callback).
+    remote_at_wav: Arc<Mutex<VecDeque<f32>>>,
+    stereo_writer: Mutex<Option<SendStereoWavWriter>>,
     mic_accumulator: Mutex<Vec<f32>>,
 }
 
-impl Drop for BridgeShared {
+impl Drop for DuplexShared {
     fn drop(&mut self) {
-        if let Ok(mut g) = self.writer.lock() {
+        if let Ok(mut g) = self.stereo_writer.lock() {
             if let Some(w) = g.take() {
                 let _ = w.0.finalize();
             }
@@ -41,10 +50,11 @@ impl Drop for BridgeShared {
 }
 
 pub struct MeetingBridgeHandle {
-    /// Keeps ring + WAV writer alive until input/output streams are dropped.
-    _shared: Arc<BridgeShared>,
-    input_stream: cpal::Stream,
-    output_stream: cpal::Stream,
+    _shared: Arc<DuplexShared>,
+    mic_input: cpal::Stream,
+    virtual_input: cpal::Stream,
+    virtual_output: cpal::Stream,
+    physical_output: cpal::Stream,
     pub recording: Recording,
     pub meter_peak_milli: Arc<AtomicU32>,
     start_time: std::time::Instant,
@@ -61,8 +71,8 @@ fn store_meter_peak(meter: &AtomicU32, samples: &[f32]) {
     meter.store(milli, Ordering::Relaxed);
 }
 
-fn push_ring(shared: &Arc<BridgeShared>, mono: &[f32]) {
-    let mut ring = shared.ring.lock().unwrap();
+fn push_ring(q: &Arc<Mutex<VecDeque<f32>>>, mono: &[f32]) {
+    let mut ring = q.lock().unwrap();
     for &s in mono {
         if ring.len() >= RING_CAP {
             ring.pop_front();
@@ -71,63 +81,118 @@ fn push_ring(shared: &Arc<BridgeShared>, mono: &[f32]) {
     }
 }
 
-fn write_wav_mono(shared: &Arc<BridgeShared>, mono: &[f32]) {
-    if let Ok(mut w) = shared.writer.lock() {
-        if let Some(writer) = w.as_mut() {
-            for &s in mono {
-                let _ = writer
-                    .0
-                    .write_sample(s.clamp(-32768.0, 32767.0) as i16);
-            }
+fn push_remote_capped(q: &Arc<Mutex<VecDeque<f32>>>, mono: &[f32]) {
+    let mut r = q.lock().unwrap();
+    for &s in mono {
+        while r.len() >= REMOTE_CAP {
+            r.pop_front();
         }
+        r.push_back(s);
     }
 }
 
+fn write_stereo_from_mic_chunk(
+    shared: &Arc<DuplexShared>,
+    left_at_wav_sr: &[f32],
+) {
+    let mut remote = shared.remote_at_wav.lock().unwrap();
+    let mut w = match shared.stereo_writer.lock() {
+        Ok(g) => g,
+        Err(_) => return,
+    };
+    let Some(writer) = w.as_mut() else {
+        return;
+    };
+    for &l in left_at_wav_sr {
+        let rr = remote.pop_front().unwrap_or(0.0);
+        let _ = writer.0.write_sample(l.clamp(-32768.0, 32767.0) as i16);
+        let _ = writer.0.write_sample(rr.clamp(-32768.0, 32767.0) as i16);
+    }
+}
+
+fn require_f32(label: &str, fmt: SampleFormat) -> Result<()> {
+    if fmt != SampleFormat::F32 {
+        anyhow::bail!(
+            "{}: sample format {:?} not supported for duplex bridge yet. In Audio MIDI Setup, set the device to 32-bit float if possible.",
+            label,
+            fmt
+        );
+    }
+    Ok(())
+}
+
 pub fn start_meeting_bridge(
-    physical_input_id: Option<&str>,
-    bridge_output_id: &str,
+    physical_mic_id: Option<&str>,
+    physical_speakers_id: Option<&str>,
+    virtual_cable_id: &str,
     noise_cancel_enabled: bool,
     noise_cancel_level: &str,
     recordings_dir: PathBuf,
 ) -> Result<MeetingBridgeHandle> {
     std::fs::create_dir_all(&recordings_dir).context("Failed to create recordings dir")?;
 
-    let in_dev = get_input_device(physical_input_id)?;
-    let out_dev = get_output_device(Some(bridge_output_id))?;
+    let mic_dev = get_input_device(physical_mic_id)?;
+    let virt_in_dev = get_input_device(Some(virtual_cable_id))?;
+    let virt_out_dev = get_output_device(Some(virtual_cable_id))?;
+    let speaker_dev = get_output_device(physical_speakers_id)?;
 
-    let in_conf = in_dev.default_input_config()?;
-    let out_conf = out_dev.default_output_config()?;
+    let mic_conf = mic_dev.default_input_config()?;
+    let vi_conf = virt_in_dev.default_input_config()?;
+    let vo_conf = virt_out_dev.default_output_config()?;
+    let sp_conf = speaker_dev.default_output_config()?;
 
-    let in_sr = in_conf.sample_rate().0;
-    let out_sr = out_conf.sample_rate().0;
-    let in_ch = in_conf.channels();
-    let out_ch = out_conf.channels() as usize;
+    require_f32("Physical microphone", mic_conf.sample_format())?;
+    require_f32("Virtual cable (input / Meet playback)", vi_conf.sample_format())?;
+    require_f32("Virtual cable (output / Meet mic)", vo_conf.sample_format())?;
+    require_f32("Physical speakers", sp_conf.sample_format())?;
 
-    let in_cfg = StreamConfig {
-        channels: in_ch,
-        sample_rate: SampleRate(in_sr),
+    let mic_sr = mic_conf.sample_rate().0;
+    let vi_sr = vi_conf.sample_rate().0;
+    let vo_sr = vo_conf.sample_rate().0;
+    let sp_sr = sp_conf.sample_rate().0;
+
+    let mic_ch = mic_conf.channels();
+    let vi_ch = vi_conf.channels();
+    let vo_ch = vo_conf.channels() as usize;
+    let sp_ch = sp_conf.channels() as usize;
+
+    let mic_cfg = StreamConfig {
+        channels: mic_ch,
+        sample_rate: SampleRate(mic_sr),
         buffer_size: cpal::BufferSize::Default,
     };
-    let out_cfg = StreamConfig {
-        channels: out_conf.channels(),
-        sample_rate: SampleRate(out_sr),
+    let vi_cfg = StreamConfig {
+        channels: vi_ch,
+        sample_rate: SampleRate(vi_sr),
+        buffer_size: cpal::BufferSize::Default,
+    };
+    let vo_cfg = StreamConfig {
+        channels: vo_conf.channels(),
+        sample_rate: SampleRate(vo_sr),
+        buffer_size: cpal::BufferSize::Default,
+    };
+    let sp_cfg = StreamConfig {
+        channels: sp_conf.channels(),
+        sample_rate: SampleRate(sp_sr),
         buffer_size: cpal::BufferSize::Default,
     };
 
     let id = uuid::Uuid::new_v4().to_string();
-    let filename = format!("meeting-{}.wav", &id[..8]);
+    let filename = format!("meeting-duplex-{}.wav", &id[..8]);
     let path = recordings_dir.join(&filename);
     let wav_spec = WavSpec {
-        channels: 1,
-        sample_rate: out_sr,
+        channels: 2,
+        sample_rate: WAV_SR,
         bits_per_sample: 16,
         sample_format: HoundSampleFormat::Int,
     };
-    let writer = WavWriter::create(&path, wav_spec).context("Failed to create meeting WAV")?;
+    let writer = WavWriter::create(&path, wav_spec).context("Failed to create duplex WAV")?;
 
-    let shared = Arc::new(BridgeShared {
-        ring: Mutex::new(VecDeque::new()),
-        writer: Mutex::new(Some(SendWavWriter(writer))),
+    let shared = Arc::new(DuplexShared {
+        to_meet_ring: Arc::new(Mutex::new(VecDeque::new())),
+        to_speaker_ring: Arc::new(Mutex::new(VecDeque::new())),
+        remote_at_wav: Arc::new(Mutex::new(VecDeque::new())),
+        stereo_writer: Mutex::new(Some(SendStereoWavWriter(writer))),
         mic_accumulator: Mutex::new(Vec::new()),
     });
 
@@ -140,55 +205,39 @@ pub fn start_meeting_bridge(
 
     let meter = Arc::new(AtomicU32::new(0));
 
-    let input_stream = match in_conf.sample_format() {
-        SampleFormat::F32 => build_input_to_ring::<f32>(
-            &in_dev,
-            &in_cfg,
-            in_sr,
-            in_ch,
-            noise_cancel_enabled,
-            Arc::clone(&shared),
-            Arc::clone(&processor),
-            out_sr,
-            Arc::clone(&meter),
-        )?,
-        SampleFormat::I16 => build_input_to_ring::<i16>(
-            &in_dev,
-            &in_cfg,
-            in_sr,
-            in_ch,
-            noise_cancel_enabled,
-            Arc::clone(&shared),
-            Arc::clone(&processor),
-            out_sr,
-            Arc::clone(&meter),
-        )?,
-        SampleFormat::U16 => build_input_to_ring::<u16>(
-            &in_dev,
-            &in_cfg,
-            in_sr,
-            in_ch,
-            noise_cancel_enabled,
-            Arc::clone(&shared),
-            Arc::clone(&processor),
-            out_sr,
-            Arc::clone(&meter),
-        )?,
-        _ => anyhow::bail!("Unsupported input sample format for meeting bridge"),
-    };
+    let mic_input = build_mic_duplex_f32(
+        &mic_dev,
+        &mic_cfg,
+        mic_sr,
+        mic_ch,
+        noise_cancel_enabled,
+        Arc::clone(&shared),
+        Arc::clone(&processor),
+        vo_sr,
+        Arc::clone(&meter),
+    )?;
 
-    let output_stream = match out_conf.sample_format() {
-        SampleFormat::F32 => build_output_from_ring_f32(&out_dev, &out_cfg, out_ch, Arc::clone(&shared))?,
-        SampleFormat::I16 => build_output_from_ring_i16(&out_dev, &out_cfg, out_ch, Arc::clone(&shared))?,
-        SampleFormat::U16 => build_output_from_ring_u16(&out_dev, &out_cfg, out_ch, Arc::clone(&shared))?,
-        _ => anyhow::bail!("Unsupported output sample format for meeting bridge"),
-    };
+    let virtual_input = build_virtual_in_duplex_f32(
+        &virt_in_dev,
+        &vi_cfg,
+        vi_sr,
+        vi_ch,
+        sp_sr,
+        Arc::clone(&shared),
+    )?;
 
-    input_stream.play().context("Failed to start bridge input")?;
-    output_stream.play().context("Failed to start bridge output")?;
+    let virtual_output = build_output_from_ring_f32(&virt_out_dev, &vo_cfg, vo_ch, Arc::clone(&shared.to_meet_ring))?;
+
+    let physical_output =
+        build_output_from_ring_f32(&speaker_dev, &sp_cfg, sp_ch, Arc::clone(&shared.to_speaker_ring))?;
+
+    mic_input.play().context("mic input")?;
+    virtual_input.play().context("virtual input")?;
+    virtual_output.play().context("virtual output")?;
+    physical_output.play().context("physical output")?;
 
     let created_at = Utc::now().to_rfc3339();
-    let display_name = format!("{} (meeting bridge)", default_display_name_for_dir(&recordings_dir));
+    let display_name = format!("{} (call stereo)", default_display_name_for_dir(&recordings_dir));
 
     let recording = Recording {
         id,
@@ -202,8 +251,10 @@ pub fn start_meeting_bridge(
 
     Ok(MeetingBridgeHandle {
         _shared: shared,
-        input_stream,
-        output_stream,
+        mic_input,
+        virtual_input,
+        virtual_output,
+        physical_output,
         recording,
         meter_peak_milli: meter,
         start_time: std::time::Instant::now(),
@@ -212,20 +263,26 @@ pub fn start_meeting_bridge(
 
 impl MeetingBridgeHandle {
     pub fn stop(self) -> Result<Recording> {
-        let _ = self.input_stream.pause();
-        let _ = self.output_stream.pause();
+        let _ = self.mic_input.pause();
+        let _ = self.virtual_input.pause();
+        let _ = self.virtual_output.pause();
+        let _ = self.physical_output.pause();
         let duration_secs = self.start_time.elapsed().as_secs() as u32;
         let rec = self.recording.clone();
         let MeetingBridgeHandle {
             _shared,
-            input_stream,
-            output_stream,
+            mic_input,
+            virtual_input,
+            virtual_output,
+            physical_output,
             recording: _,
             meter_peak_milli: _,
             start_time: _,
         } = self;
-        drop(output_stream);
-        drop(input_stream);
+        drop(physical_output);
+        drop(virtual_output);
+        drop(virtual_input);
+        drop(mic_input);
         drop(_shared);
         Ok(Recording {
             duration_secs,
@@ -234,44 +291,25 @@ impl MeetingBridgeHandle {
     }
 }
 
-trait IntoF32 {
-    fn into_f32(self) -> f32;
-}
-impl IntoF32 for f32 {
-    fn into_f32(self) -> f32 {
-        self
-    }
-}
-impl IntoF32 for i16 {
-    fn into_f32(self) -> f32 {
-        self as f32 / 32768.0
-    }
-}
-impl IntoF32 for u16 {
-    fn into_f32(self) -> f32 {
-        (self as f32 - 32768.0) / 32768.0
-    }
-}
-
-fn build_input_to_ring<T: cpal::Sample + SizedSample + IntoF32 + Send + 'static>(
+fn build_mic_duplex_f32(
     device: &cpal::Device,
     config: &StreamConfig,
     device_sample_rate: u32,
     channels: u16,
     noise_cancel_enabled: bool,
-    shared: Arc<BridgeShared>,
+    shared: Arc<DuplexShared>,
     processor: Arc<Mutex<Option<NoiseProcessor>>>,
-    out_sample_rate: u32,
+    virt_out_sr: u32,
     meter: Arc<AtomicU32>,
 ) -> Result<cpal::Stream> {
     let stream = device.build_input_stream(
         config,
-        move |data: &[T], _| {
-            let mut float_samples: Vec<f32> = data.iter().map(|s| s.into_f32() * 32768.0).collect();
+        move |data: &[f32], _| {
+            let mut float_samples: Vec<f32> = data.iter().map(|s| *s * 32768.0).collect();
             if channels > 1 {
                 float_samples = stereo_to_mono(&float_samples);
             }
-            let mono_out_rate: Vec<f32> = if noise_cancel_enabled {
+            let uplink: Vec<f32> = if noise_cancel_enabled {
                 let resampled = resample_mono(&float_samples, device_sample_rate, DENOISE_SAMPLE_RATE);
                 let mut acc = shared.mic_accumulator.lock().unwrap();
                 acc.extend_from_slice(&resampled);
@@ -285,20 +323,48 @@ fn build_input_to_ring<T: cpal::Sample + SizedSample + IntoF32 + Send + 'static>
                             p.process_frame(&mut frame);
                         }
                     }
-                    let at_out = resample_mono(&frame[..], DENOISE_SAMPLE_RATE, out_sample_rate);
-                    out_chunks.extend(at_out);
+                    let at_virt = resample_mono(&frame[..], DENOISE_SAMPLE_RATE, virt_out_sr);
+                    out_chunks.extend(at_virt);
                 }
                 out_chunks
             } else {
-                resample_mono(&float_samples, device_sample_rate, out_sample_rate)
+                resample_mono(&float_samples, device_sample_rate, virt_out_sr)
             };
-            if !mono_out_rate.is_empty() {
-                store_meter_peak(&meter, &mono_out_rate);
-                write_wav_mono(&shared, &mono_out_rate);
-                push_ring(&shared, &mono_out_rate);
+            if uplink.is_empty() {
+                return;
             }
+            store_meter_peak(&meter, &uplink);
+            push_ring(&shared.to_meet_ring, &uplink);
+            let left_wav = resample_mono(&uplink, virt_out_sr, WAV_SR);
+            write_stereo_from_mic_chunk(&shared, &left_wav);
         },
-        |e| log::error!("Bridge input error: {}", e),
+        |e| log::error!("Duplex mic input: {}", e),
+        None,
+    )?;
+    Ok(stream)
+}
+
+fn build_virtual_in_duplex_f32(
+    device: &cpal::Device,
+    config: &StreamConfig,
+    vi_sr: u32,
+    channels: u16,
+    sp_sr: u32,
+    shared: Arc<DuplexShared>,
+) -> Result<cpal::Stream> {
+    let stream = device.build_input_stream(
+        config,
+        move |data: &[f32], _| {
+            let mut float_samples: Vec<f32> = data.iter().map(|s| *s * 32768.0).collect();
+            if channels > 1 {
+                float_samples = stereo_to_mono(&float_samples);
+            }
+            let at_wav = resample_mono(&float_samples, vi_sr, WAV_SR);
+            push_remote_capped(&shared.remote_at_wav, &at_wav);
+            let to_spk = resample_mono(&float_samples, vi_sr, sp_sr);
+            push_ring(&shared.to_speaker_ring, &to_spk);
+        },
+        |e| log::error!("Duplex virtual input: {}", e),
         None,
     )?;
     Ok(stream)
@@ -308,7 +374,7 @@ fn build_output_from_ring_f32(
     device: &cpal::Device,
     config: &StreamConfig,
     out_channels: usize,
-    shared: Arc<BridgeShared>,
+    ring: Arc<Mutex<VecDeque<f32>>>,
 ) -> Result<cpal::Stream> {
     let ch = out_channels.max(1);
     let stream = device.build_output_stream(
@@ -316,70 +382,16 @@ fn build_output_from_ring_f32(
         move |data: &mut [f32], _| {
             let total = data.len();
             let mono_n = total / ch;
-            let mut ring = shared.ring.lock().unwrap();
+            let mut q = ring.lock().unwrap();
             for i in 0..mono_n {
-                let m = ring.pop_front().unwrap_or(0.0);
+                let m = q.pop_front().unwrap_or(0.0);
                 let norm = (m / 32768.0).clamp(-1.0, 1.0);
                 for c in 0..ch {
                     data[i * ch + c] = norm;
                 }
             }
         },
-        |e| log::error!("Bridge output error: {}", e),
-        None,
-    )?;
-    Ok(stream)
-}
-
-fn build_output_from_ring_i16(
-    device: &cpal::Device,
-    config: &StreamConfig,
-    out_channels: usize,
-    shared: Arc<BridgeShared>,
-) -> Result<cpal::Stream> {
-    let ch = out_channels.max(1);
-    let stream = device.build_output_stream(
-        config,
-        move |data: &mut [i16], _| {
-            let total = data.len();
-            let mono_n = total / ch;
-            let mut ring = shared.ring.lock().unwrap();
-            for i in 0..mono_n {
-                let m = ring.pop_front().unwrap_or(0.0);
-                let s = (m.clamp(-32768.0, 32767.0)) as i16;
-                for c in 0..ch {
-                    data[i * ch + c] = s;
-                }
-            }
-        },
-        |e| log::error!("Bridge output error: {}", e),
-        None,
-    )?;
-    Ok(stream)
-}
-
-fn build_output_from_ring_u16(
-    device: &cpal::Device,
-    config: &StreamConfig,
-    out_channels: usize,
-    shared: Arc<BridgeShared>,
-) -> Result<cpal::Stream> {
-    let ch = out_channels.max(1);
-    let stream = device.build_output_stream(
-        config,
-        move |data: &mut [u16], _| {
-            let total = data.len();
-            let mono_n = total / ch;
-            let mut ring = shared.ring.lock().unwrap();
-            for i in 0..mono_n {
-                let m = ring.pop_front().unwrap_or(0.0);
-                let s = ((m.clamp(-32768.0, 32767.0) + 32768.0) as i32).clamp(0, 65535) as u16;
-                for c in 0..ch {
-                    data[i * ch + c] = s;
-                }
-            }
-        },
-        |e| log::error!("Bridge output error: {}", e),
+        |e| log::error!("Duplex output: {}", e),
         None,
     )?;
     Ok(stream)

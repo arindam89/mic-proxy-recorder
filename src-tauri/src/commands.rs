@@ -95,6 +95,7 @@ pub async fn start_meeting_bridge(
     app: AppHandle,
     state: State<'_, AppStateHandle>,
     physical_input_id: Option<String>,
+    physical_speakers_output_id: Option<String>,
     bridge_output_id: String,
     noise_cancel_enabled: bool,
     noise_cancel_level: String,
@@ -106,6 +107,7 @@ pub async fn start_meeting_bridge(
     let recordings_dir = get_recordings_dir(&app);
     let handle = crate::audio::meeting_bridge::start_meeting_bridge(
         physical_input_id.as_deref(),
+        physical_speakers_output_id.as_deref(),
         &bridge_output_id,
         noise_cancel_enabled,
         &noise_cancel_level,

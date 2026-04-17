@@ -1,16 +1,17 @@
 # Virtual microphone, speaker capture, and Zoom
 
-This application **does not install a macOS CoreAudio driver**. It uses **cpal** to capture from real inputs and, for calls, can **play your processed microphone into a playback device** such as [BlackHole](https://existential.audio/blackhole/) so Meet/Zoom can select that device as the microphone (`src-tauri/src/audio/meeting_bridge.rs`).
+This application **does not install a macOS CoreAudio driver**. It uses **cpal** for the **meeting bridge**: a **duplex relay** — physical mic → virtual cable playback (Meet mic), virtual cable capture (Meet speakers) → physical speakers — plus a **stereo** recording (L = you, R = Meet). See [BlackHole](https://existential.audio/blackhole/) and **`specs/RELAY_HUB_ARCHITECTURE.md`**.
 
-## Meeting bridge (simple call flow)
+## Meeting bridge (duplex call flow)
 
-1. Install **BlackHole 2ch** (or similar) so macOS gains a new playback + recording device.
-2. In **Mic Proxy Recorder → Recorder → Meeting bridge**, set **To Meet / Zoom** to **BlackHole 2ch** (or your aggregate that includes it).
-3. **Start meeting bridge**: the app captures your chosen **physical mic**, applies optional denoise, writes a mono WAV locally, and feeds the same audio to BlackHole’s **input** path via its **output** API (standard BlackHole routing).
-4. In **Google Meet**, choose **BlackHole 2ch** (or your aggregate) as the **microphone**.
-5. **Stop meeting bridge** when finished; open **Recordings** or the meeting card to transcribe.
+1. Install **BlackHole 2ch** (or similar) so macOS gains a matching **playback + recording** device name.
+2. In **Mic Proxy Recorder → Recorder → Meeting bridge**, set **Virtual cable** to **BlackHole 2ch** (or your aggregate that exposes it).
+3. Set **Hear the call on** to your real output (headphones recommended).
+4. **Start meeting bridge**: uplink (mic → virtual playback) and downlink (virtual capture → speakers) run together; WAV is **stereo** at 48 kHz.
+5. In **Google Meet**, set **both** **microphone** and **speaker** to that same virtual device. Using built-in speakers while the mic is BlackHole routes remote audio into the room and causes echo/feedback.
+6. **Stop meeting bridge** when finished; open **Recordings** or the meeting card to transcribe.
 
-This is the supported way to get a “virtual mic” experience without shipping a custom driver.
+This is the supported way to get a Krisp-style “everything through one virtual device” path without shipping a custom driver.
 
 ## Google Meet: why “Mic Proxy Recorder” never appears in the mic list
 

@@ -46,6 +46,8 @@ export default function App() {
   const [transcribingPath, setTranscribingPath] = useState<string | null>(null);
   const [playbackDevices, setPlaybackDevices] = useState<AudioDevice[]>([]);
   const [bridgeOutputId, setBridgeOutputId] = useState("");
+  /** `null` = OS default playback (headphones / speakers you hear the call on). */
+  const [bridgeSpeakersOutputId, setBridgeSpeakersOutputId] = useState<string | null>(null);
   const [meetingBridgeActive, setMeetingBridgeActive] = useState(false);
   const [bridgeSessionRecording, setBridgeSessionRecording] = useState<Recording | null>(null);
   const [bridgeSeconds, setBridgeSeconds] = useState(0);
@@ -157,6 +159,7 @@ export default function App() {
     try {
       const rec = await invoke<Recording>("start_meeting_bridge", {
         physicalInputId: settings.input_device_id,
+        physicalSpeakersOutputId: bridgeSpeakersOutputId,
         bridgeOutputId,
         noiseCancelEnabled: settings.noise_cancel_enabled,
         noiseCancelLevel: settings.noise_cancel_level,
@@ -170,6 +173,7 @@ export default function App() {
   }, [
     status,
     bridgeOutputId,
+    bridgeSpeakersOutputId,
     settings.input_device_id,
     settings.noise_cancel_enabled,
     settings.noise_cancel_level,
@@ -369,6 +373,8 @@ export default function App() {
                 physicalInputId={settings.input_device_id}
                 bridgeOutputId={bridgeOutputId}
                 onBridgeOutputIdChange={setBridgeOutputId}
+                bridgeSpeakersOutputId={bridgeSpeakersOutputId}
+                onBridgeSpeakersOutputIdChange={setBridgeSpeakersOutputId}
                 noiseCancelEnabled={settings.noise_cancel_enabled}
                 noiseCancelLevel={settings.noise_cancel_level}
                 meetingBridgeActive={meetingBridgeActive}

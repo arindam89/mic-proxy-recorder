@@ -1,8 +1,8 @@
 # mic-proxy-recorder
 
-A native cross-platform app for **local** microphone capture, optional noise cancellation, **meeting bridge** (send your mic to a virtual cable such as [BlackHole](https://existential.audio/blackhole/) so Google Meet / Zoom can use it), WAV recording, and offline speech-to-text (Whisper or Parakeet).
+A native cross-platform app for **local** microphone capture, optional noise cancellation, **meeting bridge** (duplex relay: your mic → virtual cable for Meet; Meet’s playback from that cable → your real speakers; **stereo** WAV with you on the left and remote on the right — see [BlackHole](https://existential.audio/blackhole/)), WAV recording, and offline speech-to-text (Whisper or Parakeet).
 
-Install **BlackHole** (or similar) once so macOS shows an extra “microphone” in Meet. This app then routes your real mic to that device and records the same audio to disk. The app does not ship its own kernel driver.
+Install **BlackHole** (or similar) once. In Meet, set **both** microphone and speaker to that cable so the full call path goes through the app and avoids speaker→mic feedback. The app does not ship its own kernel driver.
 
 ## Selected foundation
 
@@ -19,7 +19,7 @@ Install **BlackHole** (or similar) once so macOS shows an extra “microphone”
 ### Interface choice
 - **Main UI:** simple recorder-first layout:
   - input/source selector
-  - **Meeting bridge** (mic → playback device for Meet/Zoom) + normal record/pause/stop
+  - **Meeting bridge** (virtual cable for Meet mic + Meet speakers; hear the call on real output) + normal record/pause/stop
   - noise-cancel toggle + quality preset
   - transcript + export (`.txt`, `.srt`)
 - **Secondary mode:** global hotkey push-to-transcribe (for text inputs).

@@ -4,15 +4,16 @@
 
 This repo is a Tauri desktop application (Rust backend + React frontend) that provides a local microphone proxy, noise cancellation, recording, and offline speech-to-text.
 
-### Meeting bridge (Google Meet / Zoom)
+### Meeting bridge (Google Meet / Zoom) — duplex relay
 
-1. Install **[BlackHole](https://existential.audio/blackhole/)** (or another virtual audio cable your OS lists as both playback and recording).
-2. On the **Recorder** tab, under **Meeting bridge**, choose **To Meet / Zoom** = that device (e.g. “BlackHole 2ch”).
-3. Click **Start meeting bridge**. Your **physical microphone** (same as the Input device above, with optional noise cancellation) is sent to that playback device and **recorded to a local WAV** (`meeting-*.wav`).
-4. In **Google Meet**, set the microphone to the **same** device name (e.g. BlackHole). Meet only lists devices the OS provides; the bridge uses that device as the pipe.
-5. Click **Stop meeting bridge** when the call ends; transcribe or download from the meeting card or **Recordings**.
+1. Install **[BlackHole](https://existential.audio/blackhole/)** (or another virtual cable listed as **both** input and output with the **same** name).
+2. On **Recorder → Meeting bridge**, set **Virtual cable** to that device (e.g. “BlackHole 2ch”).
+3. Set **Hear the call on** to your real headphones/speakers (or **Default** for the system output). Remote audio is played there so it does not re-enter your mic through the laptop speakers.
+4. Click **Start meeting bridge**. The app routes your **physical microphone** (optional denoise) into the virtual cable and plays Meet’s output from the cable to your speakers. It records a **stereo** WAV (`meeting-duplex-*.wav`): **left = you**, **right = Meet**.
+5. In **Google Meet**, set **both** the **microphone** and the **speaker** to that same virtual device. If Meet’s speaker is still your built-in speakers while the mic is BlackHole, you will get echo/feedback.
+6. Click **Stop meeting bridge** when the call ends; transcribe or download from the meeting card or **Recordings**.
 
-See **`specs/VIRTUAL_AUDIO.md`** for Meet-specific notes.
+See **`specs/VIRTUAL_AUDIO.md`** and **`specs/RELAY_HUB_ARCHITECTURE.md`** for routing diagrams and edge cases.
 
 ## Prerequisites
 

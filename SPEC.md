@@ -12,8 +12,8 @@ Mic Proxy Recorder is a privacy-first, offline-capable desktop application that 
 - Export transcripts as .txt and .srt subtitle files
 - Global hotkey push-to-transcribe mode
 
-### Meeting bridge
-- The app can route the physical microphone (with optional denoise) to a **user-selected playback device** (e.g. BlackHole) while recording that stream to WAV, so Meet/Zoom can use the cable as the mic. See `src-tauri/src/audio/meeting_bridge.rs` and **`specs/VIRTUAL_AUDIO.md`**.
+### Meeting bridge (duplex relay)
+- The app runs a **full-duplex relay**: physical mic (optional denoise) → virtual cable **playback** (Meet mic); virtual cable **capture** (Meet speakers) → physical speakers. That keeps Meet’s playback off your room microphone and avoids feedback. It records a **stereo** 48 kHz WAV (L = you, R = remote). See `src-tauri/src/audio/meeting_bridge.rs`, **`specs/RELAY_HUB_ARCHITECTURE.md`**, and **`specs/VIRTUAL_AUDIO.md`**.
 
 ---
 
@@ -99,7 +99,7 @@ Mic Proxy Recorder is a privacy-first, offline-capable desktop application that 
 See Section 4 (API Contracts) for full command listing.
 
 ### 3.6 State (`src-tauri/src/state.rs`)
-- `AppState { recorder: Option<RecorderHandle>, settings: Settings }`
+- `AppState { recorder: Option<RecorderHandle>, meeting_bridge: Option<MeetingBridgeHandle>, settings: Settings }`
 - Held in `Arc<Mutex<AppState>>` and registered with Tauri's `.manage()`
 
 ### 3.7 Settings (`src-tauri/src/settings.rs`)
@@ -119,8 +119,8 @@ Returns playback (output) devices from the OS — used in Settings as a referenc
 ### `get_recording_meter() → { peak: number }`
 While a normal recording **or** meeting bridge is active, returns a normalized **0..1** peak level from the last input buffer (UI applies decay). Errors if neither is active.
 
-### `start_meeting_bridge(physicalInputId?, bridgeOutputId, noiseCancelEnabled, noiseCancelLevel) → Recording`
-Starts routing the physical microphone (optional denoise) to the named **playback** device (e.g. BlackHole) and writing the same audio to a mono WAV. Mutually exclusive with `start_recording`. Emits `meeting-bridge-started { recording }`.
+### `start_meeting_bridge(physicalInputId?, physicalSpeakersOutputId?, bridgeOutputId, noiseCancelEnabled, noiseCancelLevel) → Recording`
+Starts the duplex relay: physical mic → virtual cable output; virtual cable input → physical speakers (`physicalSpeakersOutputId` omitted = OS default output). Writes **stereo** WAV at 48 kHz. Meet/Zoom must use the **same** virtual device for **both** microphone and speaker. Mutually exclusive with `start_recording`. Emits `meeting-bridge-started { recording }`.
 
 ### `stop_meeting_bridge() → Recording`
 Stops the bridge, finalizes the WAV, appends to `recordings.json`. Emits `meeting-bridge-stopped { recording }`.
