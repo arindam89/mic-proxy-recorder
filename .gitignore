@@ -2,3 +2,4 @@ node_modules/
 dist/
 src-tauri/target/
 .venv-parakeet/
+scripts/__pycache__/
