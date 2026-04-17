@@ -23,7 +23,7 @@ jobs:
   build-installers:
     name: Build on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
-    if: ${{ hashFiles('package.json') != '' && hashFiles('src-tauri/Cargo.toml') != '' }}
+    if: ${{ hashFiles('package.json') && hashFiles('src-tauri/Cargo.toml') }}
     strategy:
       fail-fast: false
       matrix:
@@ -64,11 +64,16 @@ jobs:
           MODEL_URL="${{ inputs.model_url }}"
           if [ -z "$MODEL_URL" ]; then
             echo "bundle_model is true but no model_url provided."
-            echo "Set model_url to a direct downloadable file URL."
+            echo "Specify model_url in workflow dispatch inputs with a direct downloadable URL."
             exit 1
           fi
-          if ! curl -L --fail "$MODEL_URL" -o assets/models/whisper-model.bin; then
-            echo "Failed to download model from $MODEL_URL"
+          set +e
+          curl -L --fail "$MODEL_URL" -o assets/models/whisper-model.bin
+          curl_exit_code=$?
+          set -e
+          if [ $curl_exit_code -ne 0 ]; then
+            echo "Failed to download model from $MODEL_URL (curl exit code: $curl_exit_code)."
+            echo "Check URL validity, network reachability, and any required authentication."
             exit 1
           fi
 
