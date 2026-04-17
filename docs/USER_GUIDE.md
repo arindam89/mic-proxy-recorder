@@ -131,6 +131,14 @@ cargo test
 
   - Long-term fix (what this repo includes): the frontend guards Tauri API calls with `isTauri()` from `@tauri-apps/api/core` and surfaces a helpful error when the runtime is missing. See `src/App.tsx` for the safe `invoke` wrapper.
 
+- Error: `dialog.save not allowed` / save or open dialogs failing
+  - Cause: Tauri v2 requires **capabilities** that list plugin permissions (for example `dialog:allow-save`).
+  - Fix: This repo ships `src-tauri/capabilities/default.json` attached to the window labeled `main`, including `dialog:default`. Rebuild/restart the desktop app after pulling changes.
+
+- HTML `<audio>` shows **Error** for a recording under *Mic Proxy Recorder*
+  - Cause: Local WAV paths must be exposed to the webview via the **asset protocol** (`convertFileSrc`).
+  - Fix: `tauri.conf.json` enables `app.security.assetProtocol` with scopes that include app data and (on macOS) `Library/Application Support`. Restart the app after config changes.
+
 - Building `whisper-rs` / other native crates
   - These require `cmake`, a working C/C++ toolchain, and `libclang` at build time. On macOS, ensure Xcode CLT is installed and use Homebrew to install `cmake` and `llvm` if needed.
 
