@@ -48,6 +48,19 @@ export default function MeetingBridgePanel({
     }
   }, [meetingBridgeActive, duplexCableDevices, bridgeOutputId, onBridgeOutputIdChange]);
 
+  /** Do not play the call back into the virtual cable (would re-inject into the bridge). */
+  const speakerOptions = useMemo(
+    () => playbackDevices.filter((d) => d.id !== bridgeOutputId),
+    [playbackDevices, bridgeOutputId]
+  );
+
+  useEffect(() => {
+    if (meetingBridgeActive) return;
+    if (bridgeSpeakersOutputId != null && bridgeSpeakersOutputId === bridgeOutputId) {
+      onBridgeSpeakersOutputIdChange(null);
+    }
+  }, [meetingBridgeActive, bridgeOutputId, bridgeSpeakersOutputId, onBridgeSpeakersOutputIdChange]);
+
   return (
     <div className="card space-y-3 border border-primary-900/40 bg-surface-900/40">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
@@ -92,7 +105,7 @@ export default function MeetingBridgePanel({
           className="rounded-lg border border-surface-600 bg-surface-900 px-2 py-2 text-sm text-white disabled:opacity-50"
         >
           <option value="">Default</option>
-          {playbackDevices.map((d) => (
+          {speakerOptions.map((d) => (
             <option key={`spk-${d.id}`} value={d.id}>
               {d.name}
               {d.is_default ? " (default)" : ""}

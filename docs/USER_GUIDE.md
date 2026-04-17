@@ -8,7 +8,7 @@ This repo is a Tauri desktop application (Rust backend + React frontend) that pr
 
 1. Install **[BlackHole](https://existential.audio/blackhole/)** (or another virtual cable listed as **both** input and output with the **same** name).
 2. On **Recorder → Meeting bridge**, set **Virtual cable** to that device (e.g. “BlackHole 2ch”). The menu only lists devices macOS exposes as **both** input and output with the same name; built-in **MacBook Air Speakers** are playback-only and cannot be used as the virtual cable.
-3. Set **Hear the call on** to your real headphones/speakers (or **Default** for the system output). Remote audio is played there so it does not re-enter your mic through the laptop speakers.
+3. Set **Speakers** to your **real** headphones or built-in speakers (**not** the same BlackHole device as the virtual cable — that would feed the call back into the cable and can break the recording). **Default** is usually correct.
 4. Click **Start meeting bridge**. The app routes your **physical microphone** (optional denoise) into the virtual cable, plays Meet’s side from the cable to your speakers, and subtracts your own uplink from that capture (BlackHole mixes playback onto its input — this avoids the “booping” self-resonance). It records a **stereo** WAV (`meeting-duplex-*.wav`): **left = you**, **right = Meet** (remote-heavy).
 5. In **Google Meet**, set **both** the **microphone** and the **speaker** to that same virtual device. If Meet’s speaker is still your built-in speakers while the mic is BlackHole, you will get echo/feedback.
 6. Click **Stop meeting bridge** when the call ends; transcribe or download from the meeting card or **Recordings**.
