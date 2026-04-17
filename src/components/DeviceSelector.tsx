@@ -4,9 +4,10 @@ interface Props {
   devices: AudioDevice[];
   selectedId: string | null;
   onSelect: (id: string) => void;
+  disabled?: boolean;
 }
 
-export default function DeviceSelector({ devices, selectedId, onSelect }: Props) {
+export default function DeviceSelector({ devices, selectedId, onSelect, disabled = false }: Props) {
   return (
     <div className="card">
       <label className="label">Input Device</label>
@@ -16,7 +17,8 @@ export default function DeviceSelector({ devices, selectedId, onSelect }: Props)
         <select
           value={selectedId ?? ""}
           onChange={(e) => onSelect(e.target.value)}
-          className="w-full rounded-lg border border-surface-700 bg-surface-900 px-3 py-2 text-sm text-white focus:border-primary-500 focus:outline-none"
+          disabled={disabled}
+          className="w-full rounded-lg border border-surface-700 bg-surface-900 px-3 py-2 text-sm text-white focus:border-primary-500 focus:outline-none disabled:opacity-50"
         >
           <option value="">Default device</option>
           {devices.map((d) => (

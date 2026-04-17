@@ -15,6 +15,7 @@ import DeviceSelector from "./components/DeviceSelector";
 import RecorderControls from "./components/RecorderControls";
 import NoiseCancelPanel from "./components/NoiseCancelPanel";
 import TranscriptPane from "./components/TranscriptPane";
+import MeetingBridgePanel from "./components/MeetingBridgePanel";
 import RecordingLevelMeter from "./components/RecordingLevelMeter";
 import { save } from "@tauri-apps/plugin-dialog";
 import RecordingAudio from "./components/RecordingAudio";
@@ -43,6 +44,11 @@ export default function App() {
   const [recordings, setRecordings] = useState<Recording[]>([]);
   const [transcriptionStatus, setTranscriptionStatus] = useState<TranscriptionStatus>("idle");
   const [transcribingPath, setTranscribingPath] = useState<string | null>(null);
+  const [playbackDevices, setPlaybackDevices] = useState<AudioDevice[]>([]);
+  const [bridgeOutputId, setBridgeOutputId] = useState("");
+  const [meetingBridgeActive, setMeetingBridgeActive] = useState(false);
+  const [bridgeSessionRecording, setBridgeSessionRecording] = useState<Recording | null>(null);
+  const [bridgeSeconds, setBridgeSeconds] = useState(0);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [renamingCurrent, setRenamingCurrent] = useState(false);
   const [renameDraft, setRenameDraft] = useState("");
@@ -52,6 +58,10 @@ export default function App() {
     invoke<AudioDevice[]>("list_audio_devices")
       .then(setDevices)
       .catch((e) => setErrorMessage(String(e)));
+
+    invoke<AudioDevice[]>("list_playback_devices")
+      .then(setPlaybackDevices)
+      .catch(console.error);
 
     invoke<Recording[]>("list_recordings")
       .then(setRecordings)
@@ -85,6 +95,9 @@ export default function App() {
       setCurrentRecording((cur) =>
         cur && cur.path === payload.recordingPath ? { ...cur, transcript: payload.transcript } : cur
       );
+      setBridgeSessionRecording((cur) =>
+        cur && cur.path === payload.recordingPath ? { ...cur, transcript: payload.transcript } : cur
+      );
     });
 
     const unlisten2 = listen<{ message: string }>("transcription-error", ({ payload }) => {
@@ -104,7 +117,17 @@ export default function App() {
     return () => clearInterval(id);
   }, [status]);
 
+  useEffect(() => {
+    if (!meetingBridgeActive) return;
+    const id = setInterval(() => setBridgeSeconds((t) => t + 1), 1000);
+    return () => clearInterval(id);
+  }, [meetingBridgeActive]);
+
   const handleStartRecording = useCallback(async () => {
+    if (meetingBridgeActive) {
+      setErrorMessage("Stop the meeting bridge before using the normal recorder.");
+      return;
+    }
     setErrorMessage(null);
     try {
       const rec = await invoke<Recording>("start_recording", {
@@ -119,7 +142,49 @@ export default function App() {
     } catch (e) {
       setErrorMessage(String(e));
     }
-  }, [settings]);
+  }, [settings, meetingBridgeActive]);
+
+  const handleStartMeetingBridge = useCallback(async () => {
+    if (status === "recording" || status === "paused") {
+      setErrorMessage("Stop the normal recording before starting the meeting bridge.");
+      return;
+    }
+    if (!bridgeOutputId) {
+      setErrorMessage("Select a playback device (e.g. BlackHole) for the meeting bridge.");
+      return;
+    }
+    setErrorMessage(null);
+    try {
+      const rec = await invoke<Recording>("start_meeting_bridge", {
+        physicalInputId: settings.input_device_id,
+        bridgeOutputId,
+        noiseCancelEnabled: settings.noise_cancel_enabled,
+        noiseCancelLevel: settings.noise_cancel_level,
+      });
+      setBridgeSessionRecording(rec);
+      setMeetingBridgeActive(true);
+      setBridgeSeconds(0);
+    } catch (e) {
+      setErrorMessage(String(e));
+    }
+  }, [
+    status,
+    bridgeOutputId,
+    settings.input_device_id,
+    settings.noise_cancel_enabled,
+    settings.noise_cancel_level,
+  ]);
+
+  const handleStopMeetingBridge = useCallback(async () => {
+    try {
+      const rec = await invoke<Recording>("stop_meeting_bridge");
+      setMeetingBridgeActive(false);
+      setBridgeSessionRecording(rec);
+      setRecordings((prev) => [rec, ...prev]);
+    } catch (e) {
+      setErrorMessage(String(e));
+    }
+  }, []);
 
   const handleStopRecording = useCallback(async () => {
     try {
@@ -171,6 +236,7 @@ export default function App() {
     try {
       await invoke("delete_recording", { recordingId: id });
       setRecordings((prev) => prev.filter((r) => r.id !== id));
+      setBridgeSessionRecording((b) => (b?.id === id ? null : b));
     } catch (e) {
       setErrorMessage(String(e));
     }
@@ -184,6 +250,7 @@ export default function App() {
       });
       setRecordings((prev) => prev.map((r) => (r.id === id ? updated : r)));
       setCurrentRecording((cur) => (cur && cur.id === id ? updated : cur));
+      setBridgeSessionRecording((cur) => (cur && cur.id === id ? updated : cur));
     } catch (e) {
       setErrorMessage(String(e));
     }
@@ -209,6 +276,19 @@ export default function App() {
       setErrorMessage(String(e));
     }
   }, [currentRecording, handleExportRecording]);
+
+  const handleDownloadBridgeRecording = useCallback(async () => {
+    if (!bridgeSessionRecording) return;
+    try {
+      const dest = await save({
+        defaultPath: `${recordingExportBasename(bridgeSessionRecording)}.wav`,
+        filters: [{ name: "WAV Audio", extensions: ["wav"] }],
+      });
+      if (dest) await handleExportRecording(bridgeSessionRecording.path, dest);
+    } catch (e) {
+      setErrorMessage(String(e));
+    }
+  }, [bridgeSessionRecording, handleExportRecording]);
 
   const beginRenameCurrent = useCallback(() => {
     if (!currentRecording) return;
@@ -270,23 +350,8 @@ export default function App() {
                 devices={devices}
                 selectedId={settings.input_device_id}
                 onSelect={(id) => setSettings((s) => ({ ...s, input_device_id: id }))}
+                disabled={meetingBridgeActive}
               />
-              {(settings.proxy_mic_display_name.trim() || settings.proxy_speaker_display_name.trim()) && (
-                <div className="rounded-lg border border-surface-700 bg-surface-900/50 px-3 py-2 text-xs text-gray-400">
-                  <p className="font-medium text-gray-500">Saved routing labels</p>
-                  {settings.proxy_mic_display_name.trim() ? (
-                    <p>
-                      Mic: <span className="text-gray-300">{settings.proxy_mic_display_name.trim()}</span>
-                    </p>
-                  ) : null}
-                  {settings.proxy_speaker_display_name.trim() ? (
-                    <p>
-                      Speaker / loopback:{" "}
-                      <span className="text-gray-300">{settings.proxy_speaker_display_name.trim()}</span>
-                    </p>
-                  ) : null}
-                </div>
-              )}
               <NoiseCancelPanel
                 enabled={settings.noise_cancel_enabled}
                 level={settings.noise_cancel_level}
@@ -296,6 +361,20 @@ export default function App() {
                 onLevelChange={(level) =>
                   setSettings((s) => ({ ...s, noise_cancel_level: level }))
                 }
+                disabled={meetingBridgeActive}
+              />
+              <MeetingBridgePanel
+                inputDevices={devices}
+                playbackDevices={playbackDevices}
+                physicalInputId={settings.input_device_id}
+                bridgeOutputId={bridgeOutputId}
+                onBridgeOutputIdChange={setBridgeOutputId}
+                noiseCancelEnabled={settings.noise_cancel_enabled}
+                noiseCancelLevel={settings.noise_cancel_level}
+                meetingBridgeActive={meetingBridgeActive}
+                recorderBusy={status === "recording" || status === "paused"}
+                onStart={() => void handleStartMeetingBridge()}
+                onStop={() => void handleStopMeetingBridge()}
               />
               <RecorderControls
                 status={status}
@@ -303,10 +382,66 @@ export default function App() {
                 onStart={handleStartRecording}
                 onStop={handleStopRecording}
                 onPause={handlePauseRecording}
+                disabled={meetingBridgeActive}
               />
             </div>
 
             <div className="flex flex-1 flex-col gap-4">
+              {(meetingBridgeActive || bridgeSessionRecording) && (
+                <div className="card space-y-3 border border-primary-800/40">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="min-w-0 flex-1 space-y-2">
+                      <p className="text-sm font-medium text-primary-200">Meeting bridge</p>
+                      <p className="text-xs text-gray-500">
+                        {bridgeSessionRecording?.filename}
+                        {meetingBridgeActive ? (
+                          <span className="ml-2 text-red-400">Live</span>
+                        ) : null}
+                      </p>
+                      <p className="font-mono text-sm text-gray-300">
+                        {formatClock(meetingBridgeActive ? bridgeSeconds : bridgeSessionRecording?.duration_secs ?? 0)}
+                      </p>
+                      <p className="text-xs text-gray-400">
+                        {meetingBridgeActive
+                          ? "Audio is sent to the playback device you picked (e.g. BlackHole). In Meet, choose that device as the microphone."
+                          : "Bridge stopped. Transcribe or download below."}
+                      </p>
+                    </div>
+                    {!meetingBridgeActive && bridgeSessionRecording ? (
+                      <div className="flex shrink-0 flex-wrap gap-2">
+                        <button
+                          type="button"
+                          className="btn-secondary text-sm"
+                          onClick={() => void handleDownloadBridgeRecording()}
+                        >
+                          Download
+                        </button>
+                        <button
+                          type="button"
+                          className="btn-primary text-sm"
+                          onClick={() => handleTranscribe(bridgeSessionRecording)}
+                          disabled={transcriptionStatus === "transcribing"}
+                        >
+                          {transcriptionStatus === "transcribing" ? "Transcribing\u2026" : "Transcribe"}
+                        </button>
+                      </div>
+                    ) : null}
+                  </div>
+                  {meetingBridgeActive ? <RecordingLevelMeter status="bridge" /> : null}
+                  {!meetingBridgeActive && bridgeSessionRecording ? (
+                    <>
+                      <RecordingAudio filePath={bridgeSessionRecording.path} />
+                      <TranscriptPane
+                        transcript={bridgeSessionRecording.transcript}
+                        status={transcriptionStatus}
+                        recordingPath={bridgeSessionRecording.path}
+                        activeTranscribePath={transcribingPath}
+                        emptyHint="Press Transcribe to attach text to this meeting recording."
+                      />
+                    </>
+                  ) : null}
+                </div>
+              )}
               {currentRecording && (
                 <div className="card space-y-3">
                   <div className="flex flex-wrap items-start justify-between gap-3">
@@ -442,6 +577,14 @@ function listen<T = unknown>(event: string, handler: (e: any) => void): Promise<
   // No-op unlisten when not running inside Tauri
   return Promise.resolve(() => {});
 }
+function formatClock(secs: number) {
+  const m = Math.floor(secs / 60)
+    .toString()
+    .padStart(2, "0");
+  const s = (secs % 60).toString().padStart(2, "0");
+  return `${m}:${s}`;
+}
+
 function MicIcon({ className }: { className?: string }) {
   return (
     <svg

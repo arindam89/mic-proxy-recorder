@@ -6,6 +6,8 @@ interface Props {
   onStart: () => void;
   onStop: () => void;
   onPause: () => void;
+  /** When true, normal recording controls are disabled (e.g. meeting bridge is active). */
+  disabled?: boolean;
 }
 
 function formatTime(secs: number) {
@@ -22,6 +24,7 @@ export default function RecorderControls({
   onStart,
   onStop,
   onPause,
+  disabled = false,
 }: Props) {
   const isRecording = status === "recording" || status === "paused";
 
@@ -48,7 +51,7 @@ export default function RecorderControls({
         {!isRecording ? (
           <button
             onClick={onStart}
-            disabled={status === "processing"}
+            disabled={status === "processing" || disabled}
             className="btn-primary flex-1"
           >
             <RecordIcon className="h-4 w-4" />

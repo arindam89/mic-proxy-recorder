@@ -84,3 +84,25 @@ pub fn get_input_device(device_id: Option<&str>) -> Result<cpal::Device> {
             .context("No default input device available")
     }
 }
+
+/// Output (playback) device by exact name, or default when `device_id` is `None`.
+pub fn get_output_device(device_id: Option<&str>) -> Result<cpal::Device> {
+    let host = cpal::default_host();
+
+    if let Some(id) = device_id {
+        let devices = host
+            .output_devices()
+            .context("Failed to enumerate output devices")?;
+        for device in devices {
+            if let Ok(name) = device.name() {
+                if name == id {
+                    return Ok(device);
+                }
+            }
+        }
+        anyhow::bail!("Output device '{}' not found", id);
+    } else {
+        host.default_output_device()
+            .context("No default output device available")
+    }
+}

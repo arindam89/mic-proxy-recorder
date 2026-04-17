@@ -35,42 +35,6 @@ export default function SettingsPanel({ settings, onSave }: Props) {
     <div className="flex-1 overflow-y-auto p-6">
       <h2 className="mb-6 text-lg font-semibold">Settings</h2>
       <div className="max-w-lg space-y-6">
-        <div className="card space-y-3 border border-surface-600 bg-surface-900/30">
-          <label className="label">Krisp-style meetings ([krisp.ai](https://krisp.ai/))</label>
-          <p className="text-xs text-gray-400">
-            Krisp runs noise cancellation, transcription, and AI notes <span className="text-gray-300">inside your calls</span> by
-            integrating at the OS/browser level. Mic Proxy Recorder is a <span className="text-gray-300">local recorder</span> with
-            offline speech-to-text; it cannot become Krisp without new drivers, extensions, and cloud-style features documented in{" "}
-            <code className="text-gray-300">specs/KRISP_STYLE_GOALS.md</code>.
-          </p>
-          <ul className="list-inside list-disc text-xs text-gray-400">
-            <li>
-              For Meet/Teams noise and notes as Krisp describes: consider installing{" "}
-              <a
-                href="https://krisp.ai/"
-                target="_blank"
-                rel="noreferrer"
-                className="text-primary-400 hover:text-primary-300"
-              >
-                Krisp
-              </a>{" "}
-              and still use this app when you want a local WAV + Whisper/Parakeet transcript.
-            </li>
-            <li>
-              For an extra microphone row in Meet without Krisp: use{" "}
-              <a
-                href="https://existential.audio/blackhole/"
-                target="_blank"
-                rel="noreferrer"
-                className="text-primary-400 hover:text-primary-300"
-              >
-                BlackHole
-              </a>{" "}
-              + an Aggregate Device (see Virtual routing below).
-            </li>
-          </ul>
-        </div>
-
         <div className="card space-y-3">
           <label className="label">Speech-to-text engine</label>
           <p className="text-xs text-gray-400">
@@ -103,33 +67,19 @@ export default function SettingsPanel({ settings, onSave }: Props) {
         </div>
 
         <div className="card space-y-3">
-          <label className="label">Virtual routing (Zoom, Meet, loopback)</label>
-          <div className="rounded-lg border border-amber-600/40 bg-amber-950/30 px-3 py-2 text-xs text-amber-100/95">
-            <p className="font-medium text-amber-200">Mic Proxy Recorder does not appear in Google Meet’s microphone list</p>
-            <p className="mt-1 text-amber-100/85">
-              Meet (and Chrome) only show devices the <span className="text-amber-50">operating system</span> registers —
-              for example your built-in mic or a <span className="text-amber-50">virtual audio driver</span>. This app records
-              from those devices; it does not install a driver, so it cannot add a new row next to “MacBook Air Microphone”.
-            </p>
-            <p className="mt-2 text-amber-100/85">
-              To get a <span className="text-amber-50">new</span> mic in Meet: install something like{" "}
-              <a
-                href="https://existential.audio/blackhole/"
-                target="_blank"
-                rel="noreferrer"
-                className="text-primary-300 underline hover:text-primary-200"
-              >
-                BlackHole
-              </a>{" "}
-              (free), then in{" "}
-              <span className="font-mono text-amber-50">Audio MIDI Setup</span> create an{" "}
-              <span className="text-amber-50">Aggregate Device</span> that includes your real mic and/or BlackHole. Choose
-              <span className="text-amber-50"> that aggregate</span> in Meet — it will show up under its system name. Use the
-              fields below only to remember that name in this app.
-            </p>
-          </div>
+          <label className="label">Meet / Zoom notes</label>
           <p className="text-xs text-gray-400">
-            Full walkthrough: <code className="text-gray-300">specs/VIRTUAL_AUDIO.md</code> (section: Google Meet).
+            Use the <span className="text-gray-300">Meeting bridge</span> on the Recorder tab: install{" "}
+            <a
+              href="https://existential.audio/blackhole/"
+              target="_blank"
+              rel="noreferrer"
+              className="text-primary-400 hover:text-primary-300"
+            >
+              BlackHole
+            </a>{" "}
+            first, then pick it as the bridge output and as the mic in Meet. Details:{" "}
+            <code className="text-gray-300">specs/VIRTUAL_AUDIO.md</code>.
           </p>
           <div className="space-y-2">
             <label className="text-xs text-gray-500">Proxy mic label (for your notes)</label>

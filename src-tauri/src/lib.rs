@@ -41,6 +41,8 @@ pub fn run() {
             list_playback_devices,
             get_recording_meter,
             start_recording,
+            start_meeting_bridge,
+            stop_meeting_bridge,
             stop_recording,
             toggle_pause_recording,
             transcribe_recording,

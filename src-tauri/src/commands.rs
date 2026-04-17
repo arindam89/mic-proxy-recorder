@@ -44,12 +44,16 @@ pub async fn get_recording_meter(
     state: State<'_, AppStateHandle>,
 ) -> Result<RecordingMeterDto, String> {
     let s = state.lock().await;
-    let h = s
-        .recorder
-        .as_ref()
-        .ok_or_else(|| "Not recording".to_string())?;
-    let m = h.meter_peak_milli.load(Ordering::Relaxed) as f32 / 1000.0;
-    Ok(RecordingMeterDto { peak: m })
+    let m = if let Some(h) = s.recorder.as_ref() {
+        h.meter_peak_milli.load(Ordering::Relaxed)
+    } else if let Some(b) = s.meeting_bridge.as_ref() {
+        b.meter_peak_milli.load(Ordering::Relaxed)
+    } else {
+        return Err("Not recording".to_string());
+    };
+    Ok(RecordingMeterDto {
+        peak: m as f32 / 1000.0,
+    })
 }
 
 #[tauri::command]
@@ -62,7 +66,7 @@ pub async fn start_recording(
     output_format: String,
 ) -> Result<crate::audio::recorder::Recording, String> {
     let mut s = state.lock().await;
-    if s.recorder.is_some() {
+    if s.recorder.is_some() || s.meeting_bridge.is_some() {
         return Err("Already recording".into());
     }
 
@@ -87,11 +91,64 @@ pub async fn start_recording(
 }
 
 #[tauri::command]
+pub async fn start_meeting_bridge(
+    app: AppHandle,
+    state: State<'_, AppStateHandle>,
+    physical_input_id: Option<String>,
+    bridge_output_id: String,
+    noise_cancel_enabled: bool,
+    noise_cancel_level: String,
+) -> Result<crate::audio::recorder::Recording, String> {
+    let mut s = state.lock().await;
+    if s.recorder.is_some() || s.meeting_bridge.is_some() {
+        return Err("Already capturing audio".into());
+    }
+    let recordings_dir = get_recordings_dir(&app);
+    let handle = crate::audio::meeting_bridge::start_meeting_bridge(
+        physical_input_id.as_deref(),
+        &bridge_output_id,
+        noise_cancel_enabled,
+        &noise_cancel_level,
+        recordings_dir,
+    )
+    .map_err(|e| e.to_string())?;
+    let recording = handle.recording.clone();
+    s.meeting_bridge = Some(handle);
+    let _ = app.emit(
+        "meeting-bridge-started",
+        json!({ "recording": recording.clone() }),
+    );
+    Ok(recording)
+}
+
+#[tauri::command]
+pub async fn stop_meeting_bridge(
+    app: AppHandle,
+    state: State<'_, AppStateHandle>,
+) -> Result<crate::audio::recorder::Recording, String> {
+    let mut s = state.lock().await;
+    let handle = s
+        .meeting_bridge
+        .take()
+        .ok_or_else(|| "Meeting bridge not active".to_string())?;
+    let recording = handle.stop().map_err(|e| e.to_string())?;
+    let _ = append_recording_to_list(&app, &recording);
+    let _ = app.emit(
+        "meeting-bridge-stopped",
+        json!({ "recording": recording.clone() }),
+    );
+    Ok(recording)
+}
+
+#[tauri::command]
 pub async fn stop_recording(
     app: AppHandle,
     state: State<'_, AppStateHandle>,
 ) -> Result<crate::audio::recorder::Recording, String> {
     let mut s = state.lock().await;
+    if s.meeting_bridge.is_some() {
+        return Err("Stop the meeting bridge first".into());
+    }
     let handle = s.recorder.take().ok_or("Not recording")?;
     let recording = handle.stop().map_err(|e| e.to_string())?;
 

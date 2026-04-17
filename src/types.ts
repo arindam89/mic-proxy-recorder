@@ -4,7 +4,7 @@ export interface AudioDevice {
   is_default: boolean;
 }
 
-export type RecordingStatus = "idle" | "recording" | "paused" | "processing";
+export type RecordingStatus = "idle" | "recording" | "paused" | "processing" | "bridge";
 
 export type TranscriptionStatus = "idle" | "transcribing" | "done" | "error";
 

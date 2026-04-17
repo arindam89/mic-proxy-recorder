@@ -12,8 +12,8 @@ Mic Proxy Recorder is a privacy-first, offline-capable desktop application that 
 - Export transcripts as .txt and .srt subtitle files
 - Global hotkey push-to-transcribe mode
 
-### Non-goals (vs commercial Voice AI such as [Krisp](https://krisp.ai/))
-- Replacing full meeting-stack products (system-wide virtual mic in Meet/Teams, AI summaries, CRM sync, Chrome extensions) without the drivers and services those products ship. See **`specs/KRISP_STYLE_GOALS.md`** for a feature matrix and phased technical options.
+### Meeting bridge
+- The app can route the physical microphone (with optional denoise) to a **user-selected playback device** (e.g. BlackHole) while recording that stream to WAV, so Meet/Zoom can use the cable as the mic. See `src-tauri/src/audio/meeting_bridge.rs` and **`specs/VIRTUAL_AUDIO.md`**.
 
 ---
 
@@ -117,7 +117,13 @@ Returns all available microphone inputs.
 Returns playback (output) devices from the OS — used in Settings as a reference for virtual routing docs.
 
 ### `get_recording_meter() → { peak: number }`
-While a recording session is active, returns a normalized **0..1** peak level from the last input buffer (UI applies decay). Errors if not recording.
+While a normal recording **or** meeting bridge is active, returns a normalized **0..1** peak level from the last input buffer (UI applies decay). Errors if neither is active.
+
+### `start_meeting_bridge(physicalInputId?, bridgeOutputId, noiseCancelEnabled, noiseCancelLevel) → Recording`
+Starts routing the physical microphone (optional denoise) to the named **playback** device (e.g. BlackHole) and writing the same audio to a mono WAV. Mutually exclusive with `start_recording`. Emits `meeting-bridge-started { recording }`.
+
+### `stop_meeting_bridge() → Recording`
+Stops the bridge, finalizes the WAV, appends to `recordings.json`. Emits `meeting-bridge-stopped { recording }`.
 
 ### `start_recording(deviceId?, noiseCancelEnabled, noiseCancelLevel, outputFormat) → void`
 Starts audio capture. Emits `recording-started { recording: Recording }`.

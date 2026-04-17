@@ -12,7 +12,7 @@ export default function RecordingLevelMeter({ status }: Props) {
   const displayRef = useRef(0);
 
   useEffect(() => {
-    if (status !== "recording" && status !== "paused") {
+    if (status !== "recording" && status !== "paused" && status !== "bridge") {
       displayRef.current = 0;
       setLevel(0);
       return;
@@ -37,7 +37,7 @@ export default function RecordingLevelMeter({ status }: Props) {
     return () => window.clearInterval(id);
   }, [status]);
 
-  if (status !== "recording" && status !== "paused") {
+  if (status !== "recording" && status !== "paused" && status !== "bridge") {
     return null;
   }
 

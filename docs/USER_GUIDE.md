@@ -4,9 +4,15 @@
 
 This repo is a Tauri desktop application (Rust backend + React frontend) that provides a local microphone proxy, noise cancellation, recording, and offline speech-to-text.
 
-### Compared to Krisp ([krisp.ai](https://krisp.ai/))
+### Meeting bridge (Google Meet / Zoom)
 
-**Krisp** sells a full **Voice AI** stack: system-wide noise cancellation, meeting transcription, AI notes, accent features, and integrations that work **inside** Zoom, Google Meet, Microsoft Teams, and more because Krisp ships deep audio integration (and optional SDKs). **This app is different:** it records and processes audio **inside the desktop app** from microphones CoreAudio already lists. It does **not** replace Krisp for “make Meet use my processed mic automatically.” For that class of problem, use **Krisp** or install a **virtual audio driver** (e.g. [BlackHole](https://existential.audio/blackhole/)) and route Meet through it; see **`specs/VIRTUAL_AUDIO.md`** and the roadmap **`specs/KRISP_STYLE_GOALS.md`**.
+1. Install **[BlackHole](https://existential.audio/blackhole/)** (or another virtual audio cable your OS lists as both playback and recording).
+2. On the **Recorder** tab, under **Meeting bridge**, choose **To Meet / Zoom** = that device (e.g. “BlackHole 2ch”).
+3. Click **Start meeting bridge**. Your **physical microphone** (same as the Input device above, with optional noise cancellation) is sent to that playback device and **recorded to a local WAV** (`meeting-*.wav`).
+4. In **Google Meet**, set the microphone to the **same** device name (e.g. BlackHole). Meet only lists devices the OS provides; the bridge uses that device as the pipe.
+5. Click **Stop meeting bridge** when the call ends; transcribe or download from the meeting card or **Recordings**.
+
+See **`specs/VIRTUAL_AUDIO.md`** for Meet-specific notes.
 
 ## Prerequisites
 

@@ -5,11 +5,18 @@ interface Props {
   level: NoiseCancelLevel;
   onToggle: (enabled: boolean) => void;
   onLevelChange: (level: NoiseCancelLevel) => void;
+  disabled?: boolean;
 }
 
 const LEVELS: NoiseCancelLevel[] = ["off", "low", "medium", "high"];
 
-export default function NoiseCancelPanel({ enabled, level, onToggle, onLevelChange }: Props) {
+export default function NoiseCancelPanel({
+  enabled,
+  level,
+  onToggle,
+  onLevelChange,
+  disabled = false,
+}: Props) {
   return (
     <div className="card space-y-4">
       <div className="flex items-center justify-between">
@@ -17,10 +24,12 @@ export default function NoiseCancelPanel({ enabled, level, onToggle, onLevelChan
         <button
           role="switch"
           aria-checked={enabled}
+          type="button"
+          disabled={disabled}
           onClick={() => onToggle(!enabled)}
           className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
             enabled ? "bg-primary-600" : "bg-surface-700"
-          }`}
+          } disabled:opacity-50`}
         >
           <span
             className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
@@ -36,8 +45,10 @@ export default function NoiseCancelPanel({ enabled, level, onToggle, onLevelChan
             {LEVELS.filter((l) => l !== "off").map((l) => (
               <button
                 key={l}
+                type="button"
+                disabled={disabled}
                 onClick={() => onLevelChange(l)}
-                className={`flex-1 rounded-lg py-1.5 text-xs font-medium transition-colors ${
+                className={`flex-1 rounded-lg py-1.5 text-xs font-medium transition-colors disabled:opacity-50 ${
                   level === l
                     ? "bg-primary-600 text-white"
                     : "bg-surface-700 text-gray-300 hover:bg-surface-600"

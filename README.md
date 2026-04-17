@@ -1,10 +1,8 @@
 # mic-proxy-recorder
 
-A native cross-platform app with a local mic proxy, built-in recorder, and local speech-to-text.
+A native cross-platform app for **local** microphone capture, optional noise cancellation, **meeting bridge** (send your mic to a virtual cable such as [BlackHole](https://existential.audio/blackhole/) so Google Meet / Zoom can use it), WAV recording, and offline speech-to-text (Whisper or Parakeet).
 
-## Not the same as [Krisp](https://krisp.ai/)
-
-Products like **Krisp** integrate **at the system and browser level** (noise cancellation, transcription, AI notes, Meet/Teams/Zoom compatibility, optional [AI Voice SDK](https://krisp.ai/)). **Mic Proxy Recorder** focuses on **local capture + offline transcription** from devices the OS already exposes. It does **not** install a virtual microphone driver or a Meet Chrome extension. If you need Krisp-style in-call processing for Google Meet, use **Krisp** (or similar) alongside this app, or follow **`specs/VIRTUAL_AUDIO.md`** for BlackHole / aggregate routing. For a full gap analysis and phased roadmap, see **`specs/KRISP_STYLE_GOALS.md`**.
+Install **BlackHole** (or similar) once so macOS shows an extra “microphone” in Meet. This app then routes your real mic to that device and records the same audio to disk. The app does not ship its own kernel driver.
 
 ## Selected foundation
 
@@ -21,9 +19,9 @@ Products like **Krisp** integrate **at the system and browser level** (noise can
 ### Interface choice
 - **Main UI:** simple recorder-first layout:
   - input/source selector
+  - **Meeting bridge** (mic → playback device for Meet/Zoom) + normal record/pause/stop
   - noise-cancel toggle + quality preset
-  - record/pause/stop controls
-  - transcript pane + export (`.txt`, `.srt`)
+  - transcript + export (`.txt`, `.srt`)
 - **Secondary mode:** global hotkey push-to-transcribe (for text inputs).
 
 ## CI/CD: cross-platform installable binaries
