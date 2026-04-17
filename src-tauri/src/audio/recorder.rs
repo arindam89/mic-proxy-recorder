@@ -38,6 +38,10 @@ pub struct RecorderHandle {
     start_time: std::time::Instant,
 }
 
+// SAFETY: RecorderHandle is always accessed via the application state mutex and its methods
+// perform thread-safe stream operations (play/pause/drop) without concurrent interior mutation.
+unsafe impl Send for RecorderHandle {}
+
 impl RecorderHandle {
     pub fn toggle_pause(&self) {
         let was_paused = self.paused.fetch_xor(true, Ordering::SeqCst);

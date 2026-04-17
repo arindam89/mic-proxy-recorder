@@ -79,9 +79,9 @@ pub fn transcribe(
     }
 
     let language = state
-        .full_lang_id()
+        .full_lang_id_from_state()
         .ok()
-        .and_then(|id| whisper_rs::get_lang_str(id).ok())
+        .and_then(whisper_rs::get_lang_str)
         .unwrap_or("unknown")
         .to_string();
 
