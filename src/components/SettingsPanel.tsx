@@ -35,6 +35,42 @@ export default function SettingsPanel({ settings, onSave }: Props) {
     <div className="flex-1 overflow-y-auto p-6">
       <h2 className="mb-6 text-lg font-semibold">Settings</h2>
       <div className="max-w-lg space-y-6">
+        <div className="card space-y-3 border border-surface-600 bg-surface-900/30">
+          <label className="label">Krisp-style meetings ([krisp.ai](https://krisp.ai/))</label>
+          <p className="text-xs text-gray-400">
+            Krisp runs noise cancellation, transcription, and AI notes <span className="text-gray-300">inside your calls</span> by
+            integrating at the OS/browser level. Mic Proxy Recorder is a <span className="text-gray-300">local recorder</span> with
+            offline speech-to-text; it cannot become Krisp without new drivers, extensions, and cloud-style features documented in{" "}
+            <code className="text-gray-300">specs/KRISP_STYLE_GOALS.md</code>.
+          </p>
+          <ul className="list-inside list-disc text-xs text-gray-400">
+            <li>
+              For Meet/Teams noise and notes as Krisp describes: consider installing{" "}
+              <a
+                href="https://krisp.ai/"
+                target="_blank"
+                rel="noreferrer"
+                className="text-primary-400 hover:text-primary-300"
+              >
+                Krisp
+              </a>{" "}
+              and still use this app when you want a local WAV + Whisper/Parakeet transcript.
+            </li>
+            <li>
+              For an extra microphone row in Meet without Krisp: use{" "}
+              <a
+                href="https://existential.audio/blackhole/"
+                target="_blank"
+                rel="noreferrer"
+                className="text-primary-400 hover:text-primary-300"
+              >
+                BlackHole
+              </a>{" "}
+              + an Aggregate Device (see Virtual routing below).
+            </li>
+          </ul>
+        </div>
+
         <div className="card space-y-3">
           <label className="label">Speech-to-text engine</label>
           <p className="text-xs text-gray-400">

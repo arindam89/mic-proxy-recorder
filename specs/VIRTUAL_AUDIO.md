@@ -1,6 +1,6 @@
 # Virtual microphone, speaker capture, and Zoom
 
-This application **does not install a macOS CoreAudio driver** or create a true system-wide virtual microphone by itself. It records from **existing** input devices using `cpal` (see `src-tauri/src/audio/recorder.rs`).
+This application **does not install a macOS CoreAudio driver** or create a true system-wide virtual microphone by itself. It records from **existing** input devices using `cpal` (see `src-tauri/src/audio/recorder.rs`). For how this compares to commercial meeting stacks such as [Krisp](https://krisp.ai/), see **`KRISP_STYLE_GOALS.md`** in this folder.
 
 ## Google Meet: why “Mic Proxy Recorder” never appears in the mic list
 

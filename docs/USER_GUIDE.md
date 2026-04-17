@@ -4,6 +4,10 @@
 
 This repo is a Tauri desktop application (Rust backend + React frontend) that provides a local microphone proxy, noise cancellation, recording, and offline speech-to-text.
 
+### Compared to Krisp ([krisp.ai](https://krisp.ai/))
+
+**Krisp** sells a full **Voice AI** stack: system-wide noise cancellation, meeting transcription, AI notes, accent features, and integrations that work **inside** Zoom, Google Meet, Microsoft Teams, and more because Krisp ships deep audio integration (and optional SDKs). **This app is different:** it records and processes audio **inside the desktop app** from microphones CoreAudio already lists. It does **not** replace Krisp for “make Meet use my processed mic automatically.” For that class of problem, use **Krisp** or install a **virtual audio driver** (e.g. [BlackHole](https://existential.audio/blackhole/)) and route Meet through it; see **`specs/VIRTUAL_AUDIO.md`** and the roadmap **`specs/KRISP_STYLE_GOALS.md`**.
+
 ## Prerequisites
 
 - macOS: Homebrew (recommended)

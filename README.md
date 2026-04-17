@@ -2,6 +2,10 @@
 
 A native cross-platform app with a local mic proxy, built-in recorder, and local speech-to-text.
 
+## Not the same as [Krisp](https://krisp.ai/)
+
+Products like **Krisp** integrate **at the system and browser level** (noise cancellation, transcription, AI notes, Meet/Teams/Zoom compatibility, optional [AI Voice SDK](https://krisp.ai/)). **Mic Proxy Recorder** focuses on **local capture + offline transcription** from devices the OS already exposes. It does **not** install a virtual microphone driver or a Meet Chrome extension. If you need Krisp-style in-call processing for Google Meet, use **Krisp** (or similar) alongside this app, or follow **`specs/VIRTUAL_AUDIO.md`** for BlackHole / aggregate routing. For a full gap analysis and phased roadmap, see **`specs/KRISP_STYLE_GOALS.md`**.
+
 ## Selected foundation
 
 ### Technology stack

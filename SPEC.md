@@ -12,6 +12,9 @@ Mic Proxy Recorder is a privacy-first, offline-capable desktop application that 
 - Export transcripts as .txt and .srt subtitle files
 - Global hotkey push-to-transcribe mode
 
+### Non-goals (vs commercial Voice AI such as [Krisp](https://krisp.ai/))
+- Replacing full meeting-stack products (system-wide virtual mic in Meet/Teams, AI summaries, CRM sync, Chrome extensions) without the drivers and services those products ship. See **`specs/KRISP_STYLE_GOALS.md`** for a feature matrix and phased technical options.
+
 ---
 
 ## 2. Architecture Overview
