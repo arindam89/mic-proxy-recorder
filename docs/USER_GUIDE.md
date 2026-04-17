@@ -91,15 +91,21 @@ Start and stop return the active `Recording` from the Rust backend immediately, 
 
 Parakeet runs in a separate Python process using `scripts/parakeet_transcribe.py`. The default Hugging Face checkpoint is configurable with the environment variable **`PARAKEET_NEMO_MODEL`** (default: `nvidia/parakeet-tdt-0.6b-v2`). When NVIDIA publishes a newer Parakeet checkpoint (for example a “v3” name on Hugging Face), set that variable to the model id before launching the app.
 
-1. Create a virtualenv and install NeMo (large download):
+1. From the **repository root**, create the Parakeet venv and install NeMo (large download; may take several minutes). The setup script prefers **Python 3.12, 3.11, or 3.10** (NeMo / ONNX are not reliable on **3.13+**). Install one of those if needed (e.g. `brew install python@3.12` on macOS).
 
    ```bash
-   python3 -m venv .venv-parakeet
+   bash scripts/setup-parakeet-venv.sh
+   ```
+
+   Equivalent manual steps (example with Homebrew Python 3.11):
+
+   ```bash
+   /opt/homebrew/bin/python3.11 -m venv .venv-parakeet
    source .venv-parakeet/bin/activate
    pip install -r scripts/requirements-parakeet.txt
    ```
 
-2. Ensure `python3` on your `PATH` resolves to that venv when you start the desktop app (or symlink the venv’s `python` as `python3`).
+2. Restart the **Mic Proxy Recorder** desktop app. The Rust backend prefers **`.venv-parakeet/bin/python3`** in the repo when that file exists, so you normally do **not** need to change your global `PATH`.
 
 3. In **Settings**, choose **Parakeet (NeMo, local)** and save. No Whisper GGUF path is required for this mode.
 
@@ -138,6 +144,10 @@ cargo test
 - HTML `<audio>` shows **Error** for a recording under *Mic Proxy Recorder*
   - Cause: Local WAV paths must be exposed to the webview via the **asset protocol** (`convertFileSrc`).
   - Fix: `tauri.conf.json` enables `app.security.assetProtocol` with scopes that include app data and (on macOS) `Library/Application Support`. Restart the app after config changes.
+
+- Parakeet: **NeMo is not installed** / import errors after `pip install`
+  - Cause: The default `python3` on some systems is **3.13 or 3.14**, where NeMo and its ONNX stack often break.
+  - Fix: Use **Python 3.10–3.12** for `.venv-parakeet` only: run `bash scripts/setup-parakeet-venv.sh` (it picks `python3.12`, `python3.11`, or `python3.10` from your `PATH`). Install one of those if needed, remove the old `.venv-parakeet` folder, and run the script again.
 
 - Building `whisper-rs` / other native crates
   - These require `cmake`, a working C/C++ toolchain, and `libclang` at build time. On macOS, ensure Xcode CLT is installed and use Homebrew to install `cmake` and `llvm` if needed.

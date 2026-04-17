@@ -32,7 +32,7 @@ def main() -> None:
         print(
             json.dumps(
                 {
-                    "error": "NeMo is not installed. Create a venv and run: pip install -r scripts/requirements-parakeet.txt"
+                    "error": "NeMo is not installed or the venv uses an unsupported Python (use 3.10–3.12). From the repo root run: bash scripts/setup-parakeet-venv.sh — it creates .venv-parakeet and installs requirements. The desktop app uses that venv’s python when present."
                 }
             )
         )

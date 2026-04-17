@@ -22,19 +22,31 @@ struct ParakeetSegmentJson {
     text: Option<String>,
 }
 
-fn script_path() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("..")
-        .join("scripts")
-        .join("parakeet_transcribe.py")
+fn project_root() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("..")
 }
 
-fn python_bin() -> &'static str {
-    if cfg!(windows) {
-        "python"
+fn script_path() -> PathBuf {
+    project_root().join("scripts").join("parakeet_transcribe.py")
+}
+
+/// Prefer repo-local `.venv-parakeet` so the desktop app finds NeMo without changing global PATH.
+fn resolve_python_executable() -> PathBuf {
+    let venv_python = if cfg!(windows) {
+        project_root()
+            .join(".venv-parakeet")
+            .join("Scripts")
+            .join("python.exe")
     } else {
-        "python3"
+        project_root()
+            .join(".venv-parakeet")
+            .join("bin")
+            .join("python3")
+    };
+    if venv_python.is_file() {
+        return venv_python;
     }
+    PathBuf::from(if cfg!(windows) { "python" } else { "python3" })
 }
 
 /// Transcribe using NeMo Parakeet (see `scripts/parakeet_transcribe.py`).
@@ -47,11 +59,17 @@ pub fn transcribe(recording_path: &Path, recording_id: &str) -> Result<Transcrip
         );
     }
 
-    let output = Command::new(python_bin())
+    let py = resolve_python_executable();
+    let output = Command::new(&py)
         .arg(&script)
         .arg(recording_path)
         .output()
-        .with_context(|| format!("Failed to run {} (is Python installed?)", python_bin()))?;
+        .with_context(|| {
+            format!(
+                "Failed to run {} (create .venv-parakeet per docs or install Python)",
+                py.display()
+            )
+        })?;
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     let trimmed = stdout.trim();

@@ -9,6 +9,11 @@
 
 `transcription_backend` lives in `Settings` (Rust) and is mirrored in `AppSettings` (TypeScript).
 
+## Parakeet venv
+
+- Repo-local **`.venv-parakeet`** (Python **3.10–3.12**): create with `bash scripts/setup-parakeet-venv.sh`.
+- Rust (`parakeet.rs`) runs **`.venv-parakeet/bin/python3`** when that file exists, else system `python3` / `python`.
+
 ## IPC
 
 - `transcribe_recording` accepts `recording_path` only; backend and model path are read from `AppState.settings`.

@@ -1,3 +1,4 @@
 # Optional: NVIDIA NeMo ASR (Parakeet). Large install — use a dedicated venv.
 # See docs/USER_GUIDE.md for setup notes.
+# Use Python 3.10–3.12 (see scripts/setup-parakeet-venv.sh); NeMo is unreliable on 3.13+.
 nemo_toolkit[asr]>=2.0.0
