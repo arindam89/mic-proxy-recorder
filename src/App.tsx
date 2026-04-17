@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
+import { invoke as _tauriInvoke } from "@tauri-apps/api/tauri";
+import { listen as _tauriListen } from "@tauri-apps/api/event";
 import type {
   AppSettings,
   AudioDevice,
@@ -253,6 +253,26 @@ export default function App() {
   );
 }
 
+// Safe invoke wrapper: when running the Vite dev server in a normal browser
+// `window.__TAURI__` won't exist. This prevents the UI from throwing a
+// TypeError and provides a helpful error message instead. Run the app with
+// `npm run tauri -- dev` to have the Tauri API available.
+function invoke<T = unknown>(cmd: string, params?: Record<string, unknown>): Promise<T> {
+  if (typeof window !== "undefined" && (window as any).__TAURI__ !== undefined) {
+    return _tauriInvoke(cmd, params) as Promise<T>;
+  }
+  return Promise.reject(
+    new Error("Tauri API unavailable. Run the app with `npm run tauri -- dev` or build the Tauri app.")
+  );
+}
+
+function listen<T = unknown>(event: string, handler: (e: any) => void): Promise<() => void> {
+  if (typeof window !== "undefined" && (window as any).__TAURI__ !== undefined) {
+    return _tauriListen<T>(event, handler) as Promise<() => void>;
+  }
+  // No-op unlisten when not running inside Tauri
+  return Promise.resolve(() => {});
+}
 function MicIcon({ className }: { className?: string }) {
   return (
     <svg
