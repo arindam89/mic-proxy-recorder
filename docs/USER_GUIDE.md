@@ -77,8 +77,8 @@ Start and stop return the active `Recording` from the Rust backend immediately, 
 ### Names, playback, download, rename
 
 - Each new take gets a **display name** derived from the last few folders of the recordings directory plus a **UTC timestamp** (for example `com_micproxyrecorder_app_recordings_2026-04-17_20-30-45`). The on-disk file remains a stable `recording-{uuid}.wav` name.
-- After **Stop**, use the built-in **audio player** on the Recorder screen or open **Recordings** for the same controls on every clip.
-- **Download** copies the WAV to a path you choose (default filename uses the display name).
+- After **Stop**, use the built-in **audio player** on the Recorder screen or open **Recordings** for the same controls on every clip. Playback uses Tauri’s **asset protocol** for files under app data (`src-tauri/tauri.conf.json` → `app.security.assetProtocol`).
+- **Download** copies the WAV to a path you choose (default filename uses the display name). The save dialog requires the **`dialog:default`** permission in `src-tauri/capabilities/default.json`.
 - **Rename** edits only the display name (safe for transcription paths); use **Rename** on the Recorder card or on each row in **Recordings**.
 
 ### Whisper (bundled whisper.cpp)

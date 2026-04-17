@@ -9,4 +9,8 @@
 
 ## Playback
 
-The webview loads local audio via `convertFileSrc` from `@tauri-apps/api/core` (`RecordingAudio.tsx`).
+The webview loads local audio via `convertFileSrc` from `@tauri-apps/api/core` (`RecordingAudio.tsx`). That requires **`app.security.assetProtocol.enable: true`** and a **`scope`** that includes the app’s data directory (see `tauri.conf.json`).
+
+## Tauri capabilities
+
+`src-tauri/capabilities/default.json` grants **`dialog:default`** (save/open dialogs), **`fs:default`**, **`core:default`**, and other plugin defaults for the window labeled **`main`** (`tauri.conf.json` → `windows[0].label`).

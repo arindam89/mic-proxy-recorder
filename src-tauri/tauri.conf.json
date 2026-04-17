@@ -12,6 +12,7 @@
   "app": {
     "windows": [
       {
+        "label": "main",
         "title": "Mic Proxy Recorder",
         "width": 1100,
         "height": 720,
@@ -22,7 +23,15 @@
       }
     ],
     "security": {
-      "csp": null
+      "csp": null,
+      "assetProtocol": {
+        "enable": true,
+        "scope": [
+          "$APPDATA/**",
+          "$APPLOCALDATA/**",
+          "$HOME/Library/Application Support/**"
+        ]
+      }
     }
   },
   "bundle": {
