@@ -149,6 +149,10 @@ cargo test
   - Cause: The default `python3` on some systems is **3.13 or 3.14**, where NeMo and its ONNX stack often break.
   - Fix: Use **Python 3.10–3.12** for `.venv-parakeet` only: run `bash scripts/setup-parakeet-venv.sh` (it picks `python3.12`, `python3.11`, or `python3.10` from your `PATH`). Install one of those if needed, remove the old `.venv-parakeet` folder, and run the script again.
 
+- Parakeet: **returned non-JSON stdout** (Rust error) while stderr shows NeMo/tqdm logs
+  - Cause: NeMo and **tqdm** were writing progress to **stdout**; the desktop app only parses a single JSON line from stdout.
+  - Fix: `scripts/parakeet_transcribe.py` redirects NeMo’s stdout to stderr, sets `TQDM_DISABLE=1`, and emits JSON only on the real stdout. Pull latest and retry transcribe.
+
 - Building `whisper-rs` / other native crates
   - These require `cmake`, a working C/C++ toolchain, and `libclang` at build time. On macOS, ensure Xcode CLT is installed and use Homebrew to install `cmake` and `llvm` if needed.
 

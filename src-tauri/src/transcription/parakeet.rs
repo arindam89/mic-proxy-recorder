@@ -31,6 +31,40 @@ fn script_path() -> PathBuf {
 }
 
 /// Prefer repo-local `.venv-parakeet` so the desktop app finds NeMo without changing global PATH.
+fn stderr_tail(s: &str, max_chars: usize) -> String {
+    let n = s.chars().count();
+    if n <= max_chars {
+        return s.to_string();
+    }
+    s.chars()
+        .rev()
+        .take(max_chars)
+        .collect::<String>()
+        .chars()
+        .rev()
+        .collect()
+}
+
+/// NeMo may still print garbage to stdout; accept whole buffer or last JSON line.
+fn parse_parakeet_json_stdout(stdout: &str) -> Result<ParakeetJson> {
+    let trimmed = stdout.trim();
+    if trimmed.is_empty() {
+        anyhow::bail!("empty stdout");
+    }
+    if let Ok(v) = serde_json::from_str::<ParakeetJson>(trimmed) {
+        return Ok(v);
+    }
+    for line in trimmed.lines().rev() {
+        let line = line.trim();
+        if line.starts_with('{') {
+            if let Ok(v) = serde_json::from_str::<ParakeetJson>(line) {
+                return Ok(v);
+            }
+        }
+    }
+    anyhow::bail!("stdout did not contain a JSON object")
+}
+
 fn resolve_python_executable() -> PathBuf {
     let venv_python = if cfg!(windows) {
         project_root()
@@ -72,11 +106,12 @@ pub fn transcribe(recording_path: &Path, recording_id: &str) -> Result<Transcrip
         })?;
 
     let stdout = String::from_utf8_lossy(&output.stdout);
-    let trimmed = stdout.trim();
-    let parsed: ParakeetJson = serde_json::from_str(trimmed).with_context(|| {
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let parsed = parse_parakeet_json_stdout(&stdout).with_context(|| {
         format!(
-            "Parakeet returned non-JSON stdout. stderr:\n{}",
-            String::from_utf8_lossy(&output.stderr)
+            "Parakeet returned no parseable JSON on stdout (status {}). stderr tail:\n{}",
+            output.status,
+            stderr_tail(&stderr, 4000)
         )
     })?;
 
