@@ -38,6 +38,11 @@ pub struct RecorderHandle {
     start_time: std::time::Instant,
 }
 
+// SAFETY: cpal::Stream is marked as !Send for cross-platform compatibility guarantees.
+// In this app we only move/use RecorderHandle behind the global app-state mutex and invoke
+// stream control methods (play/pause/drop) in a non-concurrent manner.
+unsafe impl Send for RecorderHandle {}
+
 impl RecorderHandle {
     pub fn toggle_pause(&self) {
         let was_paused = self.paused.fetch_xor(true, Ordering::SeqCst);
