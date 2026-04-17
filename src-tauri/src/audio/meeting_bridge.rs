@@ -1,9 +1,11 @@
 //! Duplex **relay hub**: physical mic → virtual playback (Meet mic), virtual capture
 //! (Meet speakers) → physical speakers, plus **stereo WAV** (L = you, R = Meet).
 //!
-//! Requires a virtual cable (e.g. [BlackHole](https://existential.audio/blackhole/)).
-//! In Meet, set **both** microphone and speaker to that cable to avoid acoustic feedback.
-//! See `specs/RELAY_HUB_ARCHITECTURE.md`.
+//! Virtual cables typically **mix** our own playback onto the capture device; we subtract a
+//! reference of the uplink on the virtual-input path so speakers and WAV R are mostly remote audio.
+//!
+//! Requires a duplex virtual device (e.g. [BlackHole](https://existential.audio/blackhole/)). In Meet,
+//! use that device for **both** microphone and speaker. See `specs/RELAY_HUB_ARCHITECTURE.md`.
 
 use crate::audio::capture::{get_input_device, get_output_device};
 use crate::audio::processor::{
@@ -24,6 +26,13 @@ const RING_CAP: usize = 48000 * 3;
 /// Stereo WAV sample rate (fixed pairing rate).
 const WAV_SR: u32 = 48000;
 const REMOTE_CAP: usize = 48000 * 2;
+/// Reference queue for virtual-input sample rate (echo cancellation).
+const ECHO_REF_CAP: usize = 48000 * 2;
+/// ~250 ms: if the mic callback runs ahead of virtual capture, drop old ref so subtraction stays aligned.
+const ECHO_REF_MAX_LEAD: usize = 48000 / 4;
+/// BlackHole (and similar cables) **mix** playback onto their capture device — you hear your own uplink on the
+/// “virtual speaker” path. Subtract a copy of what we send to Meet so physical speakers and WAV R stay mostly remote.
+const ECHO_CANCEL_GAIN: f32 = 0.94;
 
 struct SendStereoWavWriter(WavWriter<std::io::BufWriter<std::fs::File>>);
 unsafe impl Send for SendStereoWavWriter {}
@@ -31,6 +40,8 @@ unsafe impl Send for SendStereoWavWriter {}
 struct DuplexShared {
     /// Mic (processed) → virtual **playback** (Meet reads as mic).
     to_meet_ring: Arc<Mutex<VecDeque<f32>>>,
+    /// Same uplink as `to_meet_ring`, resampled to **virtual input** rate — used to cancel loopback on that cable.
+    echo_ref_vi_sr: Arc<Mutex<VecDeque<f32>>>,
     /// Virtual capture (Meet playback) → physical speakers.
     to_speaker_ring: Arc<Mutex<VecDeque<f32>>>,
     /// Meet side at WAV_SR for stereo R channel (paired in mic callback).
@@ -200,6 +211,7 @@ pub fn start_meeting_bridge(
 
     let shared = Arc::new(DuplexShared {
         to_meet_ring: Arc::new(Mutex::new(VecDeque::new())),
+        echo_ref_vi_sr: Arc::new(Mutex::new(VecDeque::new())),
         to_speaker_ring: Arc::new(Mutex::new(VecDeque::new())),
         remote_at_wav: Arc::new(Mutex::new(VecDeque::new())),
         stereo_writer: Mutex::new(Some(SendStereoWavWriter(writer))),
@@ -224,6 +236,7 @@ pub fn start_meeting_bridge(
         Arc::clone(&shared),
         Arc::clone(&processor),
         vo_sr,
+        vi_sr,
         Arc::clone(&meter),
     )?;
 
@@ -301,6 +314,16 @@ impl MeetingBridgeHandle {
     }
 }
 
+fn push_echo_ref(q: &Arc<Mutex<VecDeque<f32>>>, mono_vi_sr: &[f32]) {
+    let mut g = q.lock().unwrap();
+    for &s in mono_vi_sr {
+        while g.len() >= ECHO_REF_CAP {
+            g.pop_front();
+        }
+        g.push_back(s);
+    }
+}
+
 fn build_mic_duplex_f32(
     device: &cpal::Device,
     config: &StreamConfig,
@@ -310,6 +333,7 @@ fn build_mic_duplex_f32(
     shared: Arc<DuplexShared>,
     processor: Arc<Mutex<Option<NoiseProcessor>>>,
     virt_out_sr: u32,
+    virt_in_sr: u32,
     meter: Arc<AtomicU32>,
 ) -> Result<cpal::Stream> {
     let stream = device.build_input_stream(
@@ -345,6 +369,8 @@ fn build_mic_duplex_f32(
             }
             store_meter_peak(&meter, &uplink);
             push_ring(&shared.to_meet_ring, &uplink);
+            let ref_vi = resample_mono(&uplink, virt_out_sr, virt_in_sr);
+            push_echo_ref(&shared.echo_ref_vi_sr, &ref_vi);
             let left_wav = resample_mono(&uplink, virt_out_sr, WAV_SR);
             write_stereo_from_mic_chunk(&shared, &left_wav);
         },
@@ -369,9 +395,21 @@ fn build_virtual_in_duplex_f32(
             if channels > 1 {
                 float_samples = stereo_to_mono(&float_samples);
             }
-            let at_wav = resample_mono(&float_samples, vi_sr, WAV_SR);
+            let mut echo_q = shared.echo_ref_vi_sr.lock().unwrap();
+            while echo_q.len() > float_samples.len() + ECHO_REF_MAX_LEAD {
+                echo_q.pop_front();
+            }
+            let cleaned: Vec<f32> = float_samples
+                .iter()
+                .map(|&s| {
+                    let r = echo_q.pop_front().unwrap_or(0.0);
+                    s - ECHO_CANCEL_GAIN * r
+                })
+                .collect();
+            drop(echo_q);
+            let at_wav = resample_mono(&cleaned, vi_sr, WAV_SR);
             push_remote_capped(&shared.remote_at_wav, &at_wav);
-            let to_spk = resample_mono(&float_samples, vi_sr, sp_sr);
+            let to_spk = resample_mono(&cleaned, vi_sr, sp_sr);
             push_ring(&shared.to_speaker_ring, &to_spk);
         },
         |e| log::error!("Duplex virtual input: {}", e),

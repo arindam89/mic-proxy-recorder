@@ -13,7 +13,7 @@ Mic Proxy Recorder is a privacy-first, offline-capable desktop application that 
 - Global hotkey push-to-transcribe mode
 
 ### Meeting bridge (duplex relay)
-- The app runs a **full-duplex relay**: physical mic (optional denoise) → virtual cable **playback** (Meet mic); virtual cable **capture** (Meet speakers) → physical speakers. That keeps Meet’s playback off your room microphone and avoids feedback. It records a **stereo** 48 kHz WAV (L = you, R = remote). See `src-tauri/src/audio/meeting_bridge.rs`, **`specs/RELAY_HUB_ARCHITECTURE.md`**, and **`specs/VIRTUAL_AUDIO.md`**.
+- The app runs a **full-duplex relay**: physical mic (optional denoise) → virtual cable **playback** (Meet mic); virtual cable **capture** (Meet speakers) → physical speakers. Virtual cables often **loop back** the app’s own playback on the capture tap; the bridge **subtracts** a resampled uplink reference on that path before driving real speakers and the WAV **R** channel (simple echo reduction, not full Krisp AEC). It records **stereo** 48 kHz (L = you, R = remote). See `src-tauri/src/audio/meeting_bridge.rs`, **`specs/RELAY_HUB_ARCHITECTURE.md`**, and **`specs/VIRTUAL_AUDIO.md`**.
 
 ---
 

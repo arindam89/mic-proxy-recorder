@@ -42,8 +42,10 @@ flowchart LR
 2. **Downlink (others → you)**  
    Meet plays remote audio into the virtual device as **speakers** → the app **captures virtual input** → resample → **write to physical speakers** so you hear the call.
 
+   On many virtual cables (including BlackHole), **playback is mixed onto the same “input” tap** you record from — so the capture contains **your uplink as well as Meet’s output**. The app subtracts a **reference copy** of the uplink (resampled to the virtual-input rate) from each virtual capture buffer before sending audio to real speakers and before writing the **R** channel. This is a simple linear echo compensator, not full Krisp-style AEC, but it removes the worst “self-loop” resonance.
+
 3. **Recording**  
-   For each instant, **L channel** = your processed voice, **R channel** = remote audio from the virtual capture (zero-padded if one path is momentarily shorter). Written as a **single stereo WAV** at a fixed rate (48 kHz).
+   For each instant, **L channel** = your processed voice, **R channel** = **echo-cancelled** virtual capture (zero-padded if one path is momentarily shorter). Written as a **single stereo WAV** at a fixed rate (48 kHz).
 
 ---
 

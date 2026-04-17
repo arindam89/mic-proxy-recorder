@@ -1,20 +1,13 @@
-import { useEffect, useMemo, useState } from "react";
-import type { AudioDevice, BlackHoleInstallerState } from "../types";
+import { useEffect, useMemo } from "react";
+import type { AudioDevice } from "../types";
 
 interface Props {
   inputDevices: AudioDevice[];
   playbackDevices: AudioDevice[];
-  physicalInputId: string | null;
-  /** Virtual cable: playback side (Meet reads as mic) + same name as input (Meet plays here). */
   bridgeOutputId: string;
   onBridgeOutputIdChange: (id: string) => void;
-  /** Real speakers/headphones; `null` = system default output. */
   bridgeSpeakersOutputId: string | null;
   onBridgeSpeakersOutputIdChange: (id: string | null) => void;
-  blackHoleInstaller: BlackHoleInstallerState | null;
-  onRefreshAudioDevices: () => void;
-  /** Opens bundled `.pkg` when present, else official download URL (macOS only). */
-  onOpenBlackHoleInstaller: () => void | Promise<void>;
   noiseCancelEnabled: boolean;
   noiseCancelLevel: string;
   meetingBridgeActive: boolean;
@@ -26,14 +19,10 @@ interface Props {
 export default function MeetingBridgePanel({
   inputDevices,
   playbackDevices,
-  physicalInputId,
   bridgeOutputId,
   onBridgeOutputIdChange,
   bridgeSpeakersOutputId,
   onBridgeSpeakersOutputIdChange,
-  blackHoleInstaller,
-  onRefreshAudioDevices,
-  onOpenBlackHoleInstaller,
   noiseCancelEnabled,
   noiseCancelLevel,
   meetingBridgeActive,
@@ -41,10 +30,6 @@ export default function MeetingBridgePanel({
   onStart,
   onStop,
 }: Props) {
-  const [hintDismissed, setHintDismissed] = useState(false);
-  const [blackHoleHint, setBlackHoleHint] = useState(false);
-
-  /** Virtual cable must be capturable as Meet "speakers" → needs same name in input + output lists. */
   const duplexCableDevices = useMemo(
     () => playbackDevices.filter((p) => inputDevices.some((i) => i.id === p.id)),
     [playbackDevices, inputDevices]
@@ -63,61 +48,17 @@ export default function MeetingBridgePanel({
     }
   }, [meetingBridgeActive, duplexCableDevices, bridgeOutputId, onBridgeOutputIdChange]);
 
-  const physicalLabel =
-    inputDevices.find((d) => d.id === physicalInputId)?.name ??
-    inputDevices.find((d) => d.is_default)?.name ??
-    "Default microphone";
-
-  const speakersLabel =
-    bridgeSpeakersOutputId == null
-      ? "Default output (system speakers / headphones)"
-      : (playbackDevices.find((d) => d.id === bridgeSpeakersOutputId)?.name ?? bridgeSpeakersOutputId);
-
   return (
     <div className="card space-y-3 border border-primary-900/40 bg-surface-900/40">
-      <div>
-        <h3 className="text-sm font-semibold text-white">Meeting bridge (duplex relay)</h3>
-        <p className="mt-1 text-xs text-gray-400">
-          Full call path runs through this app so you can record it: your{" "}
-          <span className="text-gray-300">real microphone</span> is sent to a{" "}
-          <span className="text-gray-300">virtual cable</span> (e.g.{" "}
-          <a
-            href="https://existential.audio/blackhole/"
-            target="_blank"
-            rel="noreferrer"
-            className="text-primary-400 hover:text-primary-300"
-          >
-            BlackHole
-          </a>
-          ) for Meet/Zoom to use as the <span className="text-gray-300">microphone</span>. Meet&apos;s{" "}
-          <span className="text-gray-300">speaker</span> must be the <strong>same</strong> cable so remote audio does
-          not leak into your room mic (feedback). The app plays that virtual capture to your{" "}
-          <span className="text-gray-300">real speakers</span> and writes a <strong>stereo</strong> WAV (left = you,
-          right = Meet). One-time BlackHole install required — the app does not ship a macOS driver. Architecture:{" "}
-          <code className="rounded bg-surface-800 px-1 text-[11px] text-primary-200">specs/RELAY_HUB_ARCHITECTURE.md</code>.
-        </p>
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h3 className="text-sm font-semibold text-white">Meeting bridge</h3>
+        <span className="text-[11px] text-gray-500">
+          Denoise: {noiseCancelEnabled ? noiseCancelLevel : "off"}
+        </span>
       </div>
 
-      {!hintDismissed && (
-        <div className="flex justify-between gap-2 rounded-lg bg-amber-950/40 px-2 py-1.5 text-xs text-amber-100/90">
-          <span>
-            In Meet: set <strong>both</strong> mic and speaker to the virtual cable. Mic in app:{" "}
-            <span className="text-white">{physicalLabel}</span>. Hear call on:{" "}
-            <span className="text-white">{speakersLabel}</span>. Denoise:{" "}
-            {noiseCancelEnabled ? noiseCancelLevel : "off"}.
-          </span>
-          <button type="button" className="shrink-0 text-amber-200/70 hover:text-amber-100" onClick={() => setHintDismissed(true)}>
-            Dismiss
-          </button>
-        </div>
-      )}
-
       <label className="flex flex-col gap-1">
-        <span className="text-xs text-gray-500">Virtual cable (Meet mic + Meet speakers)</span>
-        <p className="text-[11px] leading-snug text-gray-500">
-          Only devices that macOS lists as <strong>both</strong> a mic and a speaker appear here (e.g. BlackHole). Your
-          laptop speakers are output-only and cannot be the cable.
-        </p>
+        <span className="text-xs text-gray-500">Virtual cable</span>
         <select
           value={bridgeOutputId}
           onChange={(e) => onBridgeOutputIdChange(e.target.value)}
@@ -126,82 +67,21 @@ export default function MeetingBridgePanel({
         >
           {duplexCableDevices.length === 0 ? (
             <option value="">
-              {playbackDevices.length === 0
-                ? "No playback devices found"
-                : "No duplex cable — install BlackHole (input + output with same name)"}
+              {playbackDevices.length === 0 ? "No devices" : "No duplex cable (e.g. BlackHole)"}
             </option>
           ) : (
             duplexCableDevices.map((d) => (
               <option key={d.id} value={d.id}>
                 {d.name}
-                {d.is_default ? " (default output)" : ""}
+                {d.is_default ? " (default)" : ""}
               </option>
             ))
           )}
         </select>
       </label>
 
-      {blackHoleInstaller?.hostPlatform === "macos" ? (
-        <div className="space-y-2 rounded-lg border border-surface-600 bg-surface-800/40 px-2 py-2">
-          <p className="text-[11px] leading-snug text-gray-400">
-            The app cannot load a driver by itself. Maintainer builds can embed the official{" "}
-            <strong>BlackHole 2ch</strong> <code className="text-[10px] text-gray-300">.pkg</code> (see{" "}
-            <code className="text-[10px] text-gray-300">scripts/download-blackhole-pkg.sh</code> and{" "}
-            <code className="text-[10px] text-gray-300">specs/BLACKHOLE_BUNDLE.md</code>). After install, set{" "}
-            <strong>Meet mic + Meet speaker</strong> to BlackHole, then <strong>Refresh devices</strong>.
-          </p>
-          <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              className="rounded-lg border border-primary-700/60 bg-primary-950/40 px-3 py-1.5 text-xs font-medium text-primary-100 hover:bg-primary-900/50 disabled:opacity-40"
-              disabled={meetingBridgeActive}
-              onClick={() => {
-                void (async () => {
-                  await onOpenBlackHoleInstaller();
-                  setBlackHoleHint(true);
-                })();
-              }}
-            >
-              {blackHoleInstaller.bundledPkgAvailable
-                ? `Install BlackHole (${blackHoleInstaller.bundledPkgName ?? "bundled .pkg"})`
-                : "Download BlackHole installer"}
-            </button>
-            <button
-              type="button"
-              className="rounded-lg border border-surface-500 px-3 py-1.5 text-xs text-gray-200 hover:bg-surface-700 disabled:opacity-40"
-              disabled={meetingBridgeActive}
-              onClick={() => {
-                onRefreshAudioDevices();
-                setBlackHoleHint(false);
-              }}
-            >
-              Refresh devices
-            </button>
-            <a
-              href={blackHoleInstaller.upstreamHomeUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex items-center rounded-lg border border-transparent px-2 py-1.5 text-xs text-primary-400 hover:text-primary-300"
-            >
-              BlackHole site
-            </a>
-          </div>
-          {blackHoleHint ? (
-            <p className="text-[11px] text-amber-200/90">
-              Complete Apple&apos;s installer (reboot if it asks). Then click <strong>Refresh devices</strong> and pick
-              BlackHole above. In Meet, set both microphone and speaker to BlackHole.
-            </p>
-          ) : null}
-        </div>
-      ) : blackHoleInstaller && blackHoleInstaller.hostPlatform !== "macos" ? (
-        <p className="text-[11px] text-gray-500">
-          Bundled BlackHole flow is for macOS. On other platforms use a virtual cable documented in{" "}
-          <code className="text-[10px]">specs/VIRTUAL_AUDIO.md</code>.
-        </p>
-      ) : null}
-
       <label className="flex flex-col gap-1">
-        <span className="text-xs text-gray-500">Hear the call on (real speakers / headphones)</span>
+        <span className="text-xs text-gray-500">Speakers</span>
         <select
           value={bridgeSpeakersOutputId ?? ""}
           onChange={(e) => {
@@ -211,11 +91,11 @@ export default function MeetingBridgePanel({
           disabled={meetingBridgeActive}
           className="rounded-lg border border-surface-600 bg-surface-900 px-2 py-2 text-sm text-white disabled:opacity-50"
         >
-          <option value="">Default (system output)</option>
+          <option value="">Default</option>
           {playbackDevices.map((d) => (
             <option key={`spk-${d.id}`} value={d.id}>
               {d.name}
-              {d.is_default ? " (default output)" : ""}
+              {d.is_default ? " (default)" : ""}
             </option>
           ))}
         </select>
@@ -229,11 +109,11 @@ export default function MeetingBridgePanel({
             disabled={recorderBusy || !bridgeOutputId || duplexCableDevices.length === 0}
             onClick={onStart}
           >
-            Start meeting bridge
+            Start
           </button>
         ) : (
           <button type="button" className="btn-primary bg-red-700 text-sm hover:bg-red-600" onClick={onStop}>
-            Stop meeting bridge
+            Stop
           </button>
         )}
       </div>

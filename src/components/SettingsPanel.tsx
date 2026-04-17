@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
-import type { AppSettings, AudioDevice, TranscriptionBackend } from "../types";
+import type { AppSettings, AudioDevice, BlackHoleInstallerState, TranscriptionBackend } from "../types";
 
 interface Props {
   settings: AppSettings;
@@ -11,6 +11,7 @@ interface Props {
 export default function SettingsPanel({ settings, onSave }: Props) {
   const [local, setLocal] = useState<AppSettings>(settings);
   const [playbackDevices, setPlaybackDevices] = useState<AudioDevice[]>([]);
+  const [blackHole, setBlackHole] = useState<BlackHoleInstallerState | null>(null);
 
   useEffect(() => {
     setLocal(settings);
@@ -20,7 +21,30 @@ export default function SettingsPanel({ settings, onSave }: Props) {
     invoke<AudioDevice[]>("list_playback_devices")
       .then(setPlaybackDevices)
       .catch(console.error);
+    invoke<BlackHoleInstallerState>("blackhole_installer_state")
+      .then(setBlackHole)
+      .catch(() => setBlackHole(null));
   }, []);
+
+  async function refreshPlaybackList() {
+    try {
+      const list = await invoke<AudioDevice[]>("list_playback_devices");
+      setPlaybackDevices(list);
+    } catch {
+      /* ignore */
+    }
+  }
+
+  async function openBlackHoleInstaller() {
+    try {
+      await invoke("open_blackhole_installer");
+      const st = await invoke<BlackHoleInstallerState>("blackhole_installer_state");
+      setBlackHole(st);
+      await refreshPlaybackList();
+    } catch (e) {
+      console.error(e);
+    }
+  }
 
   async function handleBrowseModel() {
     const path = await open({
@@ -67,20 +91,23 @@ export default function SettingsPanel({ settings, onSave }: Props) {
         </div>
 
         <div className="card space-y-3">
-          <label className="label">Meet / Zoom notes</label>
+          <label className="label">Meet / Zoom</label>
           <p className="text-xs text-gray-400">
-            Use the <span className="text-gray-300">Meeting bridge</span> on the Recorder tab: install{" "}
-            <a
-              href="https://existential.audio/blackhole/"
-              target="_blank"
-              rel="noreferrer"
-              className="text-primary-400 hover:text-primary-300"
-            >
-              BlackHole
-            </a>{" "}
-            first, then pick it as the bridge output and as the mic in Meet. Details:{" "}
+            Recorder → <span className="text-gray-300">Meeting bridge</span>. In Meet, set <strong>both</strong>{" "}
+            microphone and speaker to your virtual cable (e.g. BlackHole). More:{" "}
+            <code className="text-gray-300">docs/USER_GUIDE.md</code>,{" "}
             <code className="text-gray-300">specs/VIRTUAL_AUDIO.md</code>.
           </p>
+          {blackHole?.hostPlatform === "macos" ? (
+            <div className="flex flex-wrap gap-2">
+              <button type="button" onClick={() => void openBlackHoleInstaller()} className="btn-secondary text-xs">
+                {blackHole.bundledPkgAvailable ? "Open BlackHole installer" : "Download BlackHole"}
+              </button>
+              <button type="button" onClick={() => void refreshPlaybackList()} className="btn-secondary text-xs">
+                Refresh playback list
+              </button>
+            </div>
+          ) : null}
           <div className="space-y-2">
             <label className="text-xs text-gray-500">Proxy mic label (for your notes)</label>
             <input
