@@ -137,6 +137,9 @@ cargo test
 
 ## Troubleshooting
 
+- **Google Meet only shows “MacBook Air Microphone” — I don’t see Mic Proxy Recorder as a mic**  
+  Expected: this app does **not** install a system microphone. Meet lists devices macOS knows about (built-in, USB, **BlackHole**, aggregates you create in **Audio MIDI Setup**, etc.). To get an extra entry in Meet, install a virtual driver such as **[BlackHole](https://existential.audio/blackhole/)** and/or create an **Aggregate Device** that combines your mic with BlackHole, then pick that device in Meet and the same device in Mic Proxy Recorder. See **`specs/VIRTUAL_AUDIO.md`** (“Google Meet”).
+
 - Error: `TypeError: Cannot read properties of undefined (reading 'invoke')`
   - Cause: The Tauri JS API isn’t available when you open the frontend in a plain browser (for example, after `npm run dev`).
   - Quick fix: Run the app via the Tauri dev command so the Tauri runtime is injected:

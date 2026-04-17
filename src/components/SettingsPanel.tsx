@@ -68,11 +68,32 @@ export default function SettingsPanel({ settings, onSave }: Props) {
 
         <div className="card space-y-3">
           <label className="label">Virtual routing (Zoom, Meet, loopback)</label>
+          <div className="rounded-lg border border-amber-600/40 bg-amber-950/30 px-3 py-2 text-xs text-amber-100/95">
+            <p className="font-medium text-amber-200">Mic Proxy Recorder does not appear in Google Meet’s microphone list</p>
+            <p className="mt-1 text-amber-100/85">
+              Meet (and Chrome) only show devices the <span className="text-amber-50">operating system</span> registers —
+              for example your built-in mic or a <span className="text-amber-50">virtual audio driver</span>. This app records
+              from those devices; it does not install a driver, so it cannot add a new row next to “MacBook Air Microphone”.
+            </p>
+            <p className="mt-2 text-amber-100/85">
+              To get a <span className="text-amber-50">new</span> mic in Meet: install something like{" "}
+              <a
+                href="https://existential.audio/blackhole/"
+                target="_blank"
+                rel="noreferrer"
+                className="text-primary-300 underline hover:text-primary-200"
+              >
+                BlackHole
+              </a>{" "}
+              (free), then in{" "}
+              <span className="font-mono text-amber-50">Audio MIDI Setup</span> create an{" "}
+              <span className="text-amber-50">Aggregate Device</span> that includes your real mic and/or BlackHole. Choose
+              <span className="text-amber-50"> that aggregate</span> in Meet — it will show up under its system name. Use the
+              fields below only to remember that name in this app.
+            </p>
+          </div>
           <p className="text-xs text-gray-400">
-            This app does not install a macOS audio driver. Save labels that match names you gave
-            an Aggregate or Multi-Output device in
-            Audio MIDI Setup, or how you pick the device in Zoom. See{" "}
-            <code className="text-gray-300">specs/VIRTUAL_AUDIO.md</code> for BlackHole / loopback patterns.
+            Full walkthrough: <code className="text-gray-300">specs/VIRTUAL_AUDIO.md</code> (section: Google Meet).
           </p>
           <div className="space-y-2">
             <label className="text-xs text-gray-500">Proxy mic label (for your notes)</label>
