@@ -26,6 +26,15 @@ function toSrt(segments: TranscriptSegment[]): string {
 }
 
 export default function TranscriptPane({ transcript, status }: Props) {
+  const handleCopy = useCallback(async () => {
+    if (!transcript?.text) return;
+    try {
+      await navigator.clipboard.writeText(transcript.text);
+    } catch (e) {
+      console.error(e);
+    }
+  }, [transcript]);
+
   const handleExportTxt = useCallback(async () => {
     if (!transcript) return;
     try {
@@ -51,12 +60,15 @@ export default function TranscriptPane({ transcript, status }: Props) {
       <div className="flex items-center justify-between">
         <label className="label mb-0">Transcript</label>
         {transcript && (
-          <div className="flex gap-2">
-            <button onClick={handleExportTxt} className="btn-secondary text-xs">
-              Export .txt
+          <div className="flex flex-wrap gap-2">
+            <button type="button" onClick={handleCopy} className="btn-secondary text-xs">
+              Copy text
             </button>
-            <button onClick={handleExportSrt} className="btn-secondary text-xs">
-              Export .srt
+            <button type="button" onClick={handleExportTxt} className="btn-secondary text-xs">
+              Download .txt
+            </button>
+            <button type="button" onClick={handleExportSrt} className="btn-secondary text-xs">
+              Download .srt
             </button>
           </div>
         )}

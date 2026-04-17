@@ -1,0 +1,3 @@
+# Optional: NVIDIA NeMo ASR (Parakeet). Large install — use a dedicated venv.
+# See docs/USER_GUIDE.md for setup notes.
+nemo_toolkit[asr]>=2.0.0

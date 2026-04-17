@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { invoke as _tauriInvoke, isTauri } from "@tauri-apps/api/core";
 import { listen as _tauriListen } from "@tauri-apps/api/event";
 import type {
@@ -28,6 +28,7 @@ export default function App() {
     input_device_id: null,
     output_format: "wav",
     model_path: null,
+    transcription_backend: "whisper",
   });
   const [status, setStatus] = useState<RecordingStatus>("idle");
   const [recordingTime, setRecordingTime] = useState(0);
@@ -36,7 +37,6 @@ export default function App() {
   const [transcript, setTranscript] = useState<Transcript | null>(null);
   const [transcriptionStatus, setTranscriptionStatus] = useState<TranscriptionStatus>("idle");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     invoke<AudioDevice[]>("list_audio_devices")
@@ -48,32 +48,23 @@ export default function App() {
       .catch(console.error);
 
     invoke<AppSettings>("get_settings")
-      .then((s) => setSettings((prev) => ({ ...prev, ...s })))
+      .then((s) =>
+        setSettings((prev) => ({
+          ...prev,
+          ...s,
+          transcription_backend: s.transcription_backend ?? "whisper",
+        }))
+      )
       .catch(console.error);
   }, []);
 
   useEffect(() => {
-    const unlisten1 = listen<{ recording: Recording }>("recording-started", ({ payload }) => {
-      setCurrentRecording(payload.recording);
-      setStatus("recording");
-      setRecordingTime(0);
-      timerRef.current = setInterval(() => setRecordingTime((t) => t + 1), 1000);
-    });
-
-    const unlisten2 = listen<{ recording: Recording }>("recording-stopped", ({ payload }) => {
-      setCurrentRecording(payload.recording);
-      setStatus("idle");
-      if (timerRef.current) clearInterval(timerRef.current);
-      setRecordingTime(0);
-      setRecordings((prev) => [payload.recording, ...prev]);
-    });
-
-    const unlisten3 = listen<{ transcript: Transcript }>("transcription-done", ({ payload }) => {
+    const unlisten1 = listen<{ transcript: Transcript }>("transcription-done", ({ payload }) => {
       setTranscript(payload.transcript);
       setTranscriptionStatus("done");
     });
 
-    const unlisten4 = listen<{ message: string }>("transcription-error", ({ payload }) => {
+    const unlisten2 = listen<{ message: string }>("transcription-error", ({ payload }) => {
       setErrorMessage(payload.message);
       setTranscriptionStatus("error");
     });
@@ -81,20 +72,27 @@ export default function App() {
     return () => {
       unlisten1.then((f) => f());
       unlisten2.then((f) => f());
-      unlisten3.then((f) => f());
-      unlisten4.then((f) => f());
     };
   }, []);
+
+  useEffect(() => {
+    if (status !== "recording") return;
+    const id = setInterval(() => setRecordingTime((t) => t + 1), 1000);
+    return () => clearInterval(id);
+  }, [status]);
 
   const handleStartRecording = useCallback(async () => {
     setErrorMessage(null);
     try {
-      await invoke("start_recording", {
+      const rec = await invoke<Recording>("start_recording", {
         deviceId: settings.input_device_id,
         noiseCancelEnabled: settings.noise_cancel_enabled,
         noiseCancelLevel: settings.noise_cancel_level,
         outputFormat: settings.output_format,
       });
+      setCurrentRecording(rec);
+      setRecordingTime(0);
+      setStatus("recording");
     } catch (e) {
       setErrorMessage(String(e));
     }
@@ -102,7 +100,11 @@ export default function App() {
 
   const handleStopRecording = useCallback(async () => {
     try {
-      await invoke("stop_recording");
+      const rec = await invoke<Recording>("stop_recording");
+      setCurrentRecording(rec);
+      setStatus("idle");
+      setRecordingTime(0);
+      setRecordings((prev) => [rec, ...prev]);
     } catch (e) {
       setErrorMessage(String(e));
     }
@@ -113,13 +115,14 @@ export default function App() {
     try {
       await invoke("toggle_pause_recording");
     } catch (e) {
+      setStatus((prev) => (prev === "paused" ? "recording" : "paused"));
       setErrorMessage(String(e));
     }
   }, []);
 
   const handleTranscribe = useCallback(
     async (recording: Recording) => {
-      if (!settings.model_path) {
+      if (settings.transcription_backend === "whisper" && !settings.model_path) {
         setErrorMessage("No Whisper model path configured. Go to Settings to set it.");
         return;
       }
@@ -128,14 +131,13 @@ export default function App() {
       try {
         await invoke("transcribe_recording", {
           recordingPath: recording.path,
-          modelPath: settings.model_path,
         });
       } catch (e) {
         setErrorMessage(String(e));
         setTranscriptionStatus("error");
       }
     },
-    [settings.model_path]
+    [settings.transcription_backend, settings.model_path]
   );
 
   const handleDeleteRecording = useCallback(async (id: string) => {

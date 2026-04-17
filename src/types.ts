@@ -31,12 +31,15 @@ export interface TranscriptSegment {
   text: string;
 }
 
+export type TranscriptionBackend = "whisper" | "parakeet";
+
 export interface AppSettings {
   noise_cancel_enabled: boolean;
   noise_cancel_level: NoiseCancelLevel;
   input_device_id: string | null;
   output_format: "wav" | "flac";
   model_path: string | null;
+  transcription_backend: TranscriptionBackend;
 }
 
 export type NoiseCancelLevel = "off" | "low" | "medium" | "high";

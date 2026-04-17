@@ -1,26 +1,9 @@
 //! Offline transcription using whisper-rs (whisper.cpp Rust bindings).
 
+use crate::transcription::{Transcript, TranscriptSegment};
 use anyhow::{Context, Result};
-use serde::{Deserialize, Serialize};
 use std::path::Path;
 use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters};
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Transcript {
-    pub recording_id: String,
-    pub text: String,
-    pub segments: Vec<TranscriptSegment>,
-    pub language: String,
-    pub created_at: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TranscriptSegment {
-    pub id: i32,
-    pub start_ms: i64,
-    pub end_ms: i64,
-    pub text: String,
-}
 
 /// Transcribe a WAV audio file using a local whisper.cpp model.
 pub fn transcribe(

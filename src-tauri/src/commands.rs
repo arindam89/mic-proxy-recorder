@@ -1,7 +1,9 @@
+use anyhow::anyhow;
 use crate::audio::{capture::list_input_devices, recorder::start_recording as audio_start_recording};
-use crate::settings::Settings;
+use crate::settings::{Settings, TranscriptionBackend};
 use crate::state::AppState;
-use crate::transcription::whisper::transcribe;
+use crate::transcription::parakeet::transcribe as parakeet_transcribe;
+use crate::transcription::whisper::transcribe as whisper_transcribe;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter, Manager, State};
@@ -25,7 +27,7 @@ pub async fn start_recording(
     noise_cancel_enabled: bool,
     noise_cancel_level: String,
     output_format: String,
-) -> Result<(), String> {
+) -> Result<crate::audio::recorder::Recording, String> {
     let mut s = state.lock().await;
     if s.recorder.is_some() {
         return Err("Already recording".into());
@@ -43,30 +45,31 @@ pub async fn start_recording(
     let recording = handle.recording.clone();
     s.recorder = Some(handle);
 
-    app.emit("recording-started", serde_json::json!({ "recording": recording }))
-        .map_err(|e| e.to_string())?;
+    let _ = app.emit("recording-started", serde_json::json!({ "recording": recording.clone() }));
 
     // suppress unused variable warning
     let _ = output_format;
 
-    Ok(())
+    Ok(recording)
 }
 
 #[tauri::command]
 pub async fn stop_recording(
     app: AppHandle,
     state: State<'_, AppStateHandle>,
-) -> Result<(), String> {
+) -> Result<crate::audio::recorder::Recording, String> {
     let mut s = state.lock().await;
     let handle = s.recorder.take().ok_or("Not recording")?;
     let recording = handle.stop().map_err(|e| e.to_string())?;
 
     let _ = append_recording_to_list(&app, &recording);
 
-    app.emit("recording-stopped", serde_json::json!({ "recording": recording }))
-        .map_err(|e| e.to_string())?;
+    let _ = app.emit(
+        "recording-stopped",
+        serde_json::json!({ "recording": recording.clone() }),
+    );
 
-    Ok(())
+    Ok(recording)
 }
 
 #[tauri::command]
@@ -82,21 +85,30 @@ pub async fn toggle_pause_recording(
 #[tauri::command]
 pub async fn transcribe_recording(
     app: AppHandle,
+    state: State<'_, AppStateHandle>,
     recording_path: String,
-    model_path: String,
 ) -> Result<(), String> {
+    let (backend, model_path) = {
+        let s = state.lock().await;
+        (s.settings.transcription_backend.clone(), s.settings.model_path.clone())
+    };
+
     let recording_id = std::path::Path::new(&recording_path)
         .file_stem()
         .and_then(|s| s.to_str())
         .unwrap_or("unknown")
         .to_string();
 
+    let path_buf = std::path::PathBuf::from(&recording_path);
+
     tokio::task::spawn_blocking(move || {
-        let result = transcribe(
-            std::path::Path::new(&recording_path),
-            std::path::Path::new(&model_path),
-            &recording_id,
-        );
+        let result: anyhow::Result<crate::transcription::Transcript> = match backend {
+            TranscriptionBackend::Whisper => match model_path.as_deref() {
+                Some(mp) => whisper_transcribe(&path_buf, std::path::Path::new(mp), &recording_id),
+                None => Err(anyhow!("Whisper model path not set")),
+            },
+            TranscriptionBackend::Parakeet => parakeet_transcribe(&path_buf, &recording_id),
+        };
 
         match result {
             Ok(transcript) => {

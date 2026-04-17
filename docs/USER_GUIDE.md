@@ -68,6 +68,40 @@ npm run tauri -- build
 
 The Tauri config is in `src-tauri/tauri.conf.json` and the frontend build output is expected in `../dist`.
 
+## Recording and transcription
+
+### Recorder UI (start / stop / timer)
+
+Start and stop return the active `Recording` from the Rust backend immediately, so the red indicator, timer, and Stop / Pause controls stay in sync. The timer only advances while status is **recording** (it pauses when you pause). If you previously saw “Already recording” while the UI still showed **Record**, that was a race where the `recording-started` event could fire before the event listener finished registering; the command return value fixes that.
+
+### Whisper (bundled whisper.cpp)
+
+1. Download a GGUF or compatible `.bin` model (see Settings in the app for a link).
+2. In **Settings**, choose **Whisper (GGUF)** and browse to the model file.
+3. After you **Stop** a take, use **Transcribe** on the recorder strip or on the **Recordings** tab.
+
+### Parakeet (NVIDIA NeMo, local Python)
+
+Parakeet runs in a separate Python process using `scripts/parakeet_transcribe.py`. The default Hugging Face checkpoint is configurable with the environment variable **`PARAKEET_NEMO_MODEL`** (default: `nvidia/parakeet-tdt-0.6b-v2`). When NVIDIA publishes a newer Parakeet checkpoint (for example a “v3” name on Hugging Face), set that variable to the model id before launching the app.
+
+1. Create a virtualenv and install NeMo (large download):
+
+   ```bash
+   python3 -m venv .venv-parakeet
+   source .venv-parakeet/bin/activate
+   pip install -r scripts/requirements-parakeet.txt
+   ```
+
+2. Ensure `python3` on your `PATH` resolves to that venv when you start the desktop app (or symlink the venv’s `python` as `python3`).
+
+3. In **Settings**, choose **Parakeet (NeMo, local)** and save. No Whisper GGUF path is required for this mode.
+
+4. Transcribe a saved WAV as with Whisper.
+
+### Transcript export
+
+On the transcript card, use **Copy text**, **Download .txt**, or **Download .srt** (segments with timestamps when available).
+
 ## Tests
 
 - JavaScript/TypeScript: there are no Jest/Vitest tests configured in this repo. Type-checking is performed by `tsc` as part of `npm run build`.
@@ -81,14 +115,14 @@ cargo test
 ## Troubleshooting
 
 - Error: `TypeError: Cannot read properties of undefined (reading 'invoke')`
-  - Cause: The Tauri JS API isn’t available when you open the frontend in a plain browser (for example, after `npm run dev`). The frontend is trying to call `invoke(...)` but `window.__TAURI__` is undefined.
+  - Cause: The Tauri JS API isn’t available when you open the frontend in a plain browser (for example, after `npm run dev`).
   - Quick fix: Run the app via the Tauri dev command so the Tauri runtime is injected:
 
     ```bash
     npm run tauri -- dev
     ```
 
-  - Long-term fix (what this repo now includes): the frontend guards Tauri API calls and surfaces a helpful error when the runtime is missing. See `src/App.tsx` for the safe `invoke` wrapper.
+  - Long-term fix (what this repo includes): the frontend guards Tauri API calls with `isTauri()` from `@tauri-apps/api/core` and surfaces a helpful error when the runtime is missing. See `src/App.tsx` for the safe `invoke` wrapper.
 
 - Building `whisper-rs` / other native crates
   - These require `cmake`, a working C/C++ toolchain, and `libclang` at build time. On macOS, ensure Xcode CLT is installed and use Homebrew to install `cmake` and `llvm` if needed.
