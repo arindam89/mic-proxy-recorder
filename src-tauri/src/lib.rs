@@ -38,6 +38,8 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             list_audio_devices,
+            list_playback_devices,
+            get_recording_meter,
             start_recording,
             stop_recording,
             toggle_pause_recording,

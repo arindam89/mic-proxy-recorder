@@ -1,11 +1,16 @@
 use anyhow::anyhow;
-use crate::audio::{capture::list_input_devices, recorder::start_recording as audio_start_recording};
+use crate::audio::{
+    capture::{list_input_devices, list_output_devices},
+    recorder::start_recording as audio_start_recording,
+};
 use crate::settings::{Settings, TranscriptionBackend};
 use crate::state::AppState;
 use crate::transcription::parakeet::transcribe as parakeet_transcribe;
 use crate::transcription::whisper::transcribe as whisper_transcribe;
+use serde::Serialize;
 use serde_json::json;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter, Manager, State};
 use tokio::sync::Mutex;
@@ -18,6 +23,33 @@ pub async fn list_audio_devices(
 ) -> Result<Vec<crate::audio::capture::AudioDevice>, String> {
     let _s = state.lock().await;
     list_input_devices().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn list_playback_devices(
+    state: State<'_, AppStateHandle>,
+) -> Result<Vec<crate::audio::capture::AudioDevice>, String> {
+    let _s = state.lock().await;
+    list_output_devices().map_err(|e| e.to_string())
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct RecordingMeterDto {
+    /// Normalized peak level 0.0..1.0 from the last input buffer.
+    pub peak: f32,
+}
+
+#[tauri::command]
+pub async fn get_recording_meter(
+    state: State<'_, AppStateHandle>,
+) -> Result<RecordingMeterDto, String> {
+    let s = state.lock().await;
+    let h = s
+        .recorder
+        .as_ref()
+        .ok_or_else(|| "Not recording".to_string())?;
+    let m = h.meter_peak_milli.load(Ordering::Relaxed) as f32 / 1000.0;
+    Ok(RecordingMeterDto { peak: m })
 }
 
 #[tauri::command]

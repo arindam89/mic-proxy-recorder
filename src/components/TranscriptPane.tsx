@@ -1,11 +1,42 @@
-import { useCallback } from "react";
+import { useCallback, type ReactNode } from "react";
 import { save } from "@tauri-apps/plugin-dialog";
 import { writeTextFile } from "@tauri-apps/plugin-fs";
 import type { Transcript, TranscriptSegment, TranscriptionStatus } from "../types";
 
-interface Props {
-  transcript: Transcript | null;
+export interface TranscriptPaneProps {
+  transcript: Transcript | null | undefined;
   status: TranscriptionStatus;
+  /** Path of the WAV this block belongs to (used to match transcribe / error state). */
+  recordingPath: string;
+  /** Which recording is currently being transcribed, if any. */
+  activeTranscribePath: string | null;
+  /** Shown when there is no transcript yet and this row is not active. */
+  emptyHint?: string;
+  /** When set, matching substrings in transcript text are highlighted (e.g. recordings search). */
+  highlightQuery?: string;
+}
+
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function HighlightMatches({ text, query }: { text: string; query: string }): ReactNode {
+  const q = query.trim();
+  if (!q) return text;
+  const parts = text.split(new RegExp(`(${escapeRegExp(q)})`, "gi"));
+  return (
+    <>
+      {parts.map((part, i) =>
+        part.toLowerCase() === q.toLowerCase() ? (
+          <mark key={i} className="rounded bg-amber-500/35 px-0.5 text-inherit">
+            {part}
+          </mark>
+        ) : (
+          <span key={i}>{part}</span>
+        )
+      )}
+    </>
+  );
 }
 
 function toSrt(segments: TranscriptSegment[]): string {
@@ -25,7 +56,18 @@ function toSrt(segments: TranscriptSegment[]): string {
     .join("\n");
 }
 
-export default function TranscriptPane({ transcript, status }: Props) {
+export default function TranscriptPane({
+  transcript,
+  status,
+  recordingPath,
+  activeTranscribePath,
+  emptyHint,
+  highlightQuery,
+}: TranscriptPaneProps) {
+  const isThisActive = activeTranscribePath === recordingPath;
+  const transcribingHere = status === "transcribing" && isThisActive;
+  const errorHere = status === "error" && isThisActive;
+
   const handleCopy = useCallback(async () => {
     if (!transcript?.text) return;
     try {
@@ -56,10 +98,10 @@ export default function TranscriptPane({ transcript, status }: Props) {
   }, [transcript]);
 
   return (
-    <div className="card flex flex-1 flex-col gap-3 overflow-hidden">
-      <div className="flex items-center justify-between">
-        <label className="label mb-0">Transcript</label>
-        {transcript && (
+    <div className="space-y-2 rounded-lg border border-surface-700 bg-surface-950/60 p-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span className="text-xs font-medium uppercase tracking-wide text-gray-500">Transcript</span>
+        {transcript ? (
           <div className="flex flex-wrap gap-2">
             <button type="button" onClick={handleCopy} className="btn-secondary text-xs">
               Copy text
@@ -71,36 +113,34 @@ export default function TranscriptPane({ transcript, status }: Props) {
               Download .srt
             </button>
           </div>
-        )}
+        ) : null}
       </div>
 
-      <div className="flex-1 overflow-y-auto rounded-lg bg-surface-900 p-4 text-sm leading-relaxed text-gray-200">
-        {status === "transcribing" && (
+      <div className="max-h-52 overflow-y-auto text-sm leading-relaxed text-gray-200">
+        {transcribingHere && (
           <div className="flex items-center gap-2 text-gray-400">
-            <span className="animate-spin inline-block">&#8635;</span>
+            <span className="inline-block animate-spin">&#8635;</span>
             Transcribing&hellip; this may take a moment.
           </div>
         )}
-        {status === "error" && (
-          <p className="text-red-400">Transcription failed. Check settings and try again.</p>
+        {errorHere && (
+          <p className="text-red-400">Transcription failed. Check the status message and settings.</p>
         )}
-        {status === "idle" && !transcript && (
-          <p className="text-gray-500">
-            Record audio and click Transcribe to generate a transcript.
-          </p>
+        {!transcribingHere && !errorHere && !transcript && emptyHint && (
+          <p className="text-gray-500">{emptyHint}</p>
         )}
-        {transcript && (
-          <div className="space-y-3">
+        {!transcribingHere && !errorHere && transcript && (
+          <div className="space-y-2">
             {transcript.segments.length > 0
               ? transcript.segments.map((seg) => (
-                  <p key={seg.id} className="rounded bg-surface-800 p-2">
-                    <span className="mr-2 font-mono text-xs text-gray-500">
-                      {formatMs(seg.start_ms)}
-                    </span>
-                    {seg.text}
+                  <p key={seg.id} className="rounded bg-surface-800/80 p-2">
+                    <span className="mr-2 font-mono text-xs text-gray-500">{formatMs(seg.start_ms)}</span>
+                    <HighlightMatches text={seg.text} query={highlightQuery ?? ""} />
                   </p>
                 ))
-              : transcript.text}
+              : (
+                  <HighlightMatches text={transcript.text} query={highlightQuery ?? ""} />
+                )}
           </div>
         )}
       </div>

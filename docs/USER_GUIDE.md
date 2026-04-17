@@ -76,13 +76,16 @@ The Tauri config is in `src-tauri/tauri.conf.json` and the frontend build output
 
 Start and stop return the active `Recording` from the Rust backend immediately, so the red indicator, timer, and Stop / Pause controls stay in sync. The timer only advances while status is **recording** (it pauses when you pause). If you previously saw “Already recording” while the UI still showed **Record**, that was a race where the `recording-started` event could fire before the event listener finished registering; the command return value fixes that.
 
+While **recording** or **paused**, the current take card shows an **input level** bar (normalized peak from the capture callback) so you can see when the mic is picking up signal.
+
 ### Names, playback, download, rename
 
 - Each new take gets a **display name** derived from the last few folders of the recordings directory plus a **UTC timestamp** (for example `com_micproxyrecorder_app_recordings_2026-04-17_20-30-45`). The on-disk file remains a stable `recording-{uuid}.wav` name.
 - After **Stop**, use the built-in **audio player** on the Recorder screen or open **Recordings** for the same controls on every clip. Playback uses Tauri’s **asset protocol** for files under app data (`src-tauri/tauri.conf.json` → `app.security.assetProtocol`).
 - **Download** copies the WAV to a path you choose (default filename uses the display name). The save dialog requires the **`dialog:default`** permission in `src-tauri/capabilities/default.json`.
 - **Rename** edits only the display name (safe for transcription paths); use **Rename** on the Recorder card or on each row in **Recordings**.
-- On **Recordings**, each clip that has been transcribed shows the **transcript inline**. Use **Download transcript** to save a **Markdown** (`.md`) file. Use the **search** field to filter by **display name** or **transcript text**; matching substrings are **highlighted** in the title and transcript preview.
+- On **Recordings**, each clip keeps **transcript** (copy / .txt / .srt and search highlights) **inside that clip’s card** so context stays with the take. Use **Download transcript** for a **Markdown** (`.md`) export. The **search** field filters by **display name** or **transcript text**; matches are highlighted in the title and in transcript lines.
+- **Settings → Virtual routing** stores **proxy mic** and **speaker / loopback** labels for your own documentation (for example how you named an Aggregate device in Audio MIDI Setup). The app does not create a virtual driver; see **`specs/VIRTUAL_AUDIO.md`** for Zoom / BlackHole-style setups. **Playback devices** lists outputs on this Mac as a reference when you build a Multi-Output device.
 
 ### Whisper (bundled whisper.cpp)
 

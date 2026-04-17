@@ -101,7 +101,7 @@ See Section 4 (API Contracts) for full command listing.
 
 ### 3.7 Settings (`src-tauri/src/settings.rs`)
 - Persisted to `$APPDATA/settings.json` on save; loaded at startup in `lib.rs` setup.
-- Fields: `noise_cancel_enabled`, `noise_cancel_level`, `input_device_id`, `output_format`, `model_path`, `transcription_backend`
+- Fields: `noise_cancel_enabled`, `noise_cancel_level`, `input_device_id`, `output_format`, `model_path`, `transcription_backend`, `proxy_mic_display_name`, `proxy_speaker_display_name`
 
 ---
 
@@ -109,6 +109,12 @@ See Section 4 (API Contracts) for full command listing.
 
 ### `list_audio_devices() → AudioDevice[]`
 Returns all available microphone inputs.
+
+### `list_playback_devices() → AudioDevice[]`
+Returns playback (output) devices from the OS — used in Settings as a reference for virtual routing docs.
+
+### `get_recording_meter() → { peak: number }`
+While a recording session is active, returns a normalized **0..1** peak level from the last input buffer (UI applies decay). Errors if not recording.
 
 ### `start_recording(deviceId?, noiseCancelEnabled, noiseCancelLevel, outputFormat) → void`
 Starts audio capture. Emits `recording-started { recording: Recording }`.
@@ -177,6 +183,9 @@ interface AppSettings {
   input_device_id: string | null;
   output_format: "wav" | "flac";
   model_path: string | null;
+  transcription_backend: "whisper" | "parakeet";
+  proxy_mic_display_name: string;
+  proxy_speaker_display_name: string;
 }
 ```
 
@@ -192,9 +201,9 @@ interface AppSettings {
 │  │ Input Device   │  │  Current Recording Card (when active) │ │
 │  │ [select ▼]     │  │  filename.wav  [Transcribe]           │ │
 │  ├────────────────┤  ├───────────────────────────────────────┤ │
-│  │ Noise Cancel   │  │  Transcript Pane                      │ │
-│  │ [toggle]       │  │  [Export .txt] [Export .srt]          │ │
-│  │ Low Med High   │  │                                       │ │
+│  │ Noise Cancel   │  │  Input level (while recording)        │ │
+│  │ [toggle]       │  │  Transcript (inside card when idle)   │ │
+│  │ Low Med High   │  │  [Export .txt] [Export .srt]          │ │
 │  ├────────────────┤  │  00:01  Hello world...                │ │
 │  │ Recorder       │  │  00:05  This is a test...             │ │
 │  │  00:00         │  │                                       │ │

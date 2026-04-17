@@ -15,6 +15,7 @@ import DeviceSelector from "./components/DeviceSelector";
 import RecorderControls from "./components/RecorderControls";
 import NoiseCancelPanel from "./components/NoiseCancelPanel";
 import TranscriptPane from "./components/TranscriptPane";
+import RecordingLevelMeter from "./components/RecordingLevelMeter";
 import { save } from "@tauri-apps/plugin-dialog";
 import RecordingAudio from "./components/RecordingAudio";
 import RecordingsList from "./components/RecordingsList";
@@ -33,13 +34,15 @@ export default function App() {
     output_format: "wav",
     model_path: null,
     transcription_backend: "whisper",
+    proxy_mic_display_name: "",
+    proxy_speaker_display_name: "",
   });
   const [status, setStatus] = useState<RecordingStatus>("idle");
   const [recordingTime, setRecordingTime] = useState(0);
   const [currentRecording, setCurrentRecording] = useState<Recording | null>(null);
   const [recordings, setRecordings] = useState<Recording[]>([]);
-  const [transcript, setTranscript] = useState<Transcript | null>(null);
   const [transcriptionStatus, setTranscriptionStatus] = useState<TranscriptionStatus>("idle");
+  const [transcribingPath, setTranscribingPath] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [renamingCurrent, setRenamingCurrent] = useState(false);
   const [renameDraft, setRenameDraft] = useState("");
@@ -60,6 +63,8 @@ export default function App() {
           ...prev,
           ...s,
           transcription_backend: s.transcription_backend ?? "whisper",
+          proxy_mic_display_name: s.proxy_mic_display_name ?? "",
+          proxy_speaker_display_name: s.proxy_speaker_display_name ?? "",
         }))
       )
       .catch(console.error);
@@ -70,7 +75,7 @@ export default function App() {
       transcript: Transcript;
       recordingPath: string;
     }>("transcription-done", ({ payload }) => {
-      setTranscript(payload.transcript);
+      setTranscribingPath(null);
       setTranscriptionStatus("done");
       setRecordings((prev) =>
         prev.map((r) =>
@@ -146,13 +151,15 @@ export default function App() {
         setErrorMessage("No Whisper model path configured. Go to Settings to set it.");
         return;
       }
+      setErrorMessage(null);
+      setTranscribingPath(recording.path);
       setTranscriptionStatus("transcribing");
-      setTranscript(null);
       try {
         await invoke("transcribe_recording", {
           recordingPath: recording.path,
         });
       } catch (e) {
+        setTranscribingPath(null);
         setErrorMessage(String(e));
         setTranscriptionStatus("error");
       }
@@ -264,6 +271,22 @@ export default function App() {
                 selectedId={settings.input_device_id}
                 onSelect={(id) => setSettings((s) => ({ ...s, input_device_id: id }))}
               />
+              {(settings.proxy_mic_display_name.trim() || settings.proxy_speaker_display_name.trim()) && (
+                <div className="rounded-lg border border-surface-700 bg-surface-900/50 px-3 py-2 text-xs text-gray-400">
+                  <p className="font-medium text-gray-500">Saved routing labels</p>
+                  {settings.proxy_mic_display_name.trim() ? (
+                    <p>
+                      Mic: <span className="text-gray-300">{settings.proxy_mic_display_name.trim()}</span>
+                    </p>
+                  ) : null}
+                  {settings.proxy_speaker_display_name.trim() ? (
+                    <p>
+                      Speaker / loopback:{" "}
+                      <span className="text-gray-300">{settings.proxy_speaker_display_name.trim()}</span>
+                    </p>
+                  ) : null}
+                </div>
+              )}
               <NoiseCancelPanel
                 enabled={settings.noise_cancel_enabled}
                 level={settings.noise_cancel_level}
@@ -360,10 +383,19 @@ export default function App() {
                       </div>
                     )}
                   </div>
+                  <RecordingLevelMeter status={status} />
                   {status === "idle" && <RecordingAudio filePath={currentRecording.path} />}
+                  {status === "idle" && (
+                    <TranscriptPane
+                      transcript={currentRecording.transcript}
+                      status={transcriptionStatus}
+                      recordingPath={currentRecording.path}
+                      activeTranscribePath={transcribingPath}
+                      emptyHint="When this take is saved, press Transcribe above to attach text here."
+                    />
+                  )}
                 </div>
               )}
-              <TranscriptPane transcript={transcript} status={transcriptionStatus} />
             </div>
           </div>
         )}
@@ -376,6 +408,7 @@ export default function App() {
             onRename={handleRenameRecording}
             onExportRecording={handleExportRecording}
             transcriptionStatus={transcriptionStatus}
+            activeTranscribePath={transcribingPath}
           />
         )}
 

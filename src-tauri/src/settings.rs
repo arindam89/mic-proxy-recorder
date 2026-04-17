@@ -12,6 +12,12 @@ pub struct Settings {
     pub model_path: Option<String>,
     #[serde(default)]
     pub transcription_backend: TranscriptionBackend,
+    /// User-chosen label for how they name the virtual / aggregate mic in Zoom (informational).
+    #[serde(default)]
+    pub proxy_mic_display_name: String,
+    /// User-chosen label for speaker / loopback routing (informational).
+    #[serde(default)]
+    pub proxy_speaker_display_name: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -52,6 +58,8 @@ impl Default for Settings {
             output_format: OutputFormat::Wav,
             model_path: None,
             transcription_backend: TranscriptionBackend::Whisper,
+            proxy_mic_display_name: String::new(),
+            proxy_speaker_display_name: String::new(),
         }
     }
 }

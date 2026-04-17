@@ -84,6 +84,10 @@ export interface AppSettings {
   output_format: "wav" | "flac";
   model_path: string | null;
   transcription_backend: TranscriptionBackend;
+  /** Label you use in Zoom/Meet when routing via an aggregate or virtual device (saved for your reference). */
+  proxy_mic_display_name: string;
+  /** Label for speaker / loopback side of your routing setup (informational). */
+  proxy_speaker_display_name: string;
 }
 
 export type NoiseCancelLevel = "off" | "low" | "medium" | "high";

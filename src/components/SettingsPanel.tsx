@@ -1,6 +1,7 @@
+import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
-import type { AppSettings, TranscriptionBackend } from "../types";
+import type { AppSettings, AudioDevice, TranscriptionBackend } from "../types";
 
 interface Props {
   settings: AppSettings;
@@ -9,10 +10,17 @@ interface Props {
 
 export default function SettingsPanel({ settings, onSave }: Props) {
   const [local, setLocal] = useState<AppSettings>(settings);
+  const [playbackDevices, setPlaybackDevices] = useState<AudioDevice[]>([]);
 
   useEffect(() => {
     setLocal(settings);
   }, [settings]);
+
+  useEffect(() => {
+    invoke<AudioDevice[]>("list_playback_devices")
+      .then(setPlaybackDevices)
+      .catch(console.error);
+  }, []);
 
   async function handleBrowseModel() {
     const path = await open({
@@ -56,6 +64,51 @@ export default function SettingsPanel({ settings, onSave }: Props) {
               </button>
             ))}
           </div>
+        </div>
+
+        <div className="card space-y-3">
+          <label className="label">Virtual routing (Zoom, Meet, loopback)</label>
+          <p className="text-xs text-gray-400">
+            This app does not install a macOS audio driver. Save labels that match names you gave
+            an Aggregate or Multi-Output device in
+            Audio MIDI Setup, or how you pick the device in Zoom. See{" "}
+            <code className="text-gray-300">specs/VIRTUAL_AUDIO.md</code> for BlackHole / loopback patterns.
+          </p>
+          <div className="space-y-2">
+            <label className="text-xs text-gray-500">Proxy mic label (for your notes)</label>
+            <input
+              type="text"
+              value={local.proxy_mic_display_name}
+              onChange={(e) => setLocal((s) => ({ ...s, proxy_mic_display_name: e.target.value }))}
+              placeholder="e.g. Zoom — Mic Proxy Aggregate"
+              className="w-full rounded-lg border border-surface-700 bg-surface-900 px-3 py-2 text-sm text-white placeholder:text-gray-600"
+            />
+          </div>
+          <div className="space-y-2">
+            <label className="text-xs text-gray-500">Speaker / loopback label (for your notes)</label>
+            <input
+              type="text"
+              value={local.proxy_speaker_display_name}
+              onChange={(e) => setLocal((s) => ({ ...s, proxy_speaker_display_name: e.target.value }))}
+              placeholder="e.g. Multi-Output + BlackHole"
+              className="w-full rounded-lg border border-surface-700 bg-surface-900 px-3 py-2 text-sm text-white placeholder:text-gray-600"
+            />
+          </div>
+          <details className="rounded-lg border border-surface-700 bg-surface-900/40 text-xs text-gray-400">
+            <summary className="cursor-pointer px-3 py-2 text-gray-300">Playback devices on this Mac (reference)</summary>
+            <ul className="max-h-40 list-inside list-disc overflow-y-auto px-3 pb-2">
+              {playbackDevices.length === 0 ? (
+                <li>None enumerated (or still loading).</li>
+              ) : (
+                playbackDevices.map((d) => (
+                  <li key={d.id}>
+                    {d.name}
+                    {d.is_default ? " (default)" : ""}
+                  </li>
+                ))
+              )}
+            </ul>
+          </details>
         </div>
 
         {local.transcription_backend === "whisper" && (

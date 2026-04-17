@@ -9,6 +9,7 @@ import {
   recordingTranscriptMarkdown,
 } from "../types";
 import RecordingAudio from "./RecordingAudio";
+import TranscriptPane from "./TranscriptPane";
 
 interface Props {
   recordings: Recording[];
@@ -17,6 +18,7 @@ interface Props {
   onRename: (id: string, displayName: string) => Promise<void>;
   onExportRecording: (recordingPath: string, destinationPath: string) => Promise<void>;
   transcriptionStatus: TranscriptionStatus;
+  activeTranscribePath: string | null;
 }
 
 function escapeRegExp(s: string): string {
@@ -49,6 +51,7 @@ export default function RecordingsList({
   onRename,
   onExportRecording,
   transcriptionStatus,
+  activeTranscribePath,
 }: Props) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
@@ -218,14 +221,14 @@ export default function RecordingsList({
                 </button>
               </div>
             </div>
-            {r.transcript ? (
-              <div className="rounded-lg border border-surface-700 bg-surface-950/80 p-3">
-                <p className="mb-2 text-xs font-medium uppercase tracking-wide text-gray-500">Transcript</p>
-                <p className="max-h-40 overflow-y-auto whitespace-pre-wrap text-sm leading-relaxed text-gray-200">
-                  <HighlightMatches text={r.transcript.text} query={searchQuery} />
-                </p>
-              </div>
-            ) : null}
+            <TranscriptPane
+              transcript={r.transcript}
+              status={transcriptionStatus}
+              recordingPath={r.path}
+              activeTranscribePath={activeTranscribePath}
+              emptyHint="Transcribe this clip to attach text here."
+              highlightQuery={searchQuery}
+            />
             <RecordingAudio filePath={r.path} />
           </li>
         ))}

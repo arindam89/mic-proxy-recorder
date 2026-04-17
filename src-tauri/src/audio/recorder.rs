@@ -12,7 +12,7 @@ use cpal::{SampleFormat, SampleRate, StreamConfig};
 use hound::{WavSpec, WavWriter};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
 use uuid::Uuid;
 
@@ -72,6 +72,8 @@ pub struct RecorderHandle {
     stream: cpal::Stream,
     paused: Arc<AtomicBool>,
     writer: Arc<Mutex<Option<SendWavWriter>>>,
+    /// Last input peak, 0..1000 (instantaneous per callback; UI should decay visually).
+    pub meter_peak_milli: Arc<AtomicU32>,
     start_time: std::time::Instant,
 }
 
@@ -161,6 +163,8 @@ pub fn start_recording(
     }));
 
     let accumulator: Arc<Mutex<Vec<f32>>> = Arc::new(Mutex::new(Vec::new()));
+    let meter_peak_milli = Arc::new(AtomicU32::new(0));
+    let meter_for_stream = Arc::clone(&meter_peak_milli);
 
     let stream = match supported_config.sample_format() {
         SampleFormat::F32 => build_stream::<f32>(
@@ -173,6 +177,7 @@ pub fn start_recording(
             sample_rate,
             channels,
             nc_enabled,
+            meter_for_stream,
         )?,
         SampleFormat::I16 => build_stream::<i16>(
             &device,
@@ -184,6 +189,7 @@ pub fn start_recording(
             sample_rate,
             channels,
             nc_enabled,
+            Arc::clone(&meter_peak_milli),
         )?,
         SampleFormat::U16 => build_stream::<u16>(
             &device,
@@ -195,6 +201,7 @@ pub fn start_recording(
             sample_rate,
             channels,
             nc_enabled,
+            Arc::clone(&meter_peak_milli),
         )?,
         _ => anyhow::bail!("Unsupported sample format"),
     };
@@ -219,8 +226,18 @@ pub fn start_recording(
         stream,
         paused,
         writer,
+        meter_peak_milli,
         start_time: std::time::Instant::now(),
     })
+}
+
+fn store_meter_peak(meter: &AtomicU32, samples: &[f32]) {
+    let mut pk = 0.0f32;
+    for &s in samples {
+        pk = pk.max(s.abs());
+    }
+    let milli = ((pk / 32768.0).min(1.0) * 1000.0) as u32;
+    meter.store(milli, Ordering::Relaxed);
 }
 
 fn build_stream<T: cpal::Sample + cpal::SizedSample + IntoF32 + Send + 'static>(
@@ -233,6 +250,7 @@ fn build_stream<T: cpal::Sample + cpal::SizedSample + IntoF32 + Send + 'static>(
     device_sample_rate: u32,
     channels: u16,
     noise_cancel_enabled: bool,
+    meter: Arc<AtomicU32>,
 ) -> Result<cpal::Stream> {
     let stream = device.build_input_stream(
         config,
@@ -266,6 +284,8 @@ fn build_stream<T: cpal::Sample + cpal::SizedSample + IntoF32 + Send + 'static>(
                         }
                     }
 
+                    store_meter_peak(&meter, &frame);
+
                     if let Ok(mut guard) = writer.lock() {
                         if let Some(w) = guard.as_mut() {
                             for &s in &frame {
@@ -275,6 +295,7 @@ fn build_stream<T: cpal::Sample + cpal::SizedSample + IntoF32 + Send + 'static>(
                     }
                 }
             } else {
+                store_meter_peak(&meter, &float_samples);
                 if let Ok(mut guard) = writer.lock() {
                     if let Some(w) = guard.as_mut() {
                         for &s in &float_samples {
