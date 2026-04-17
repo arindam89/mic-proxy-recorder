@@ -4,7 +4,8 @@ use crate::settings::{Settings, TranscriptionBackend};
 use crate::state::AppState;
 use crate::transcription::parakeet::transcribe as parakeet_transcribe;
 use crate::transcription::whisper::transcribe as whisper_transcribe;
-use std::path::PathBuf;
+use serde_json::json;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter, Manager, State};
 use tokio::sync::Mutex;
@@ -99,28 +100,38 @@ pub async fn transcribe_recording(
         .unwrap_or("unknown")
         .to_string();
 
-    let path_buf = std::path::PathBuf::from(&recording_path);
+    let path_buf = PathBuf::from(&recording_path);
+    let recording_path_for_persist = recording_path.clone();
+    let parakeet_script = parakeet_script_path(&app);
+    let parakeet_python = resolve_parakeet_python(&app);
+    let app_emit = app.clone();
 
     tokio::task::spawn_blocking(move || {
         let result: anyhow::Result<crate::transcription::Transcript> = match backend {
             TranscriptionBackend::Whisper => match model_path.as_deref() {
-                Some(mp) => whisper_transcribe(&path_buf, std::path::Path::new(mp), &recording_id),
+                Some(mp) => whisper_transcribe(&path_buf, Path::new(mp), &recording_id),
                 None => Err(anyhow!("Whisper model path not set")),
             },
-            TranscriptionBackend::Parakeet => parakeet_transcribe(&path_buf, &recording_id),
+            TranscriptionBackend::Parakeet => {
+                parakeet_transcribe(&path_buf, &recording_id, &parakeet_script, &parakeet_python)
+            }
         };
 
         match result {
             Ok(transcript) => {
-                let _ = app.emit(
+                let _ = persist_transcript_for_path(&app_emit, &recording_path_for_persist, &transcript);
+                let _ = app_emit.emit(
                     "transcription-done",
-                    serde_json::json!({ "transcript": transcript }),
+                    json!({
+                        "transcript": transcript,
+                        "recordingPath": recording_path_for_persist,
+                    }),
                 );
             }
             Err(e) => {
-                let _ = app.emit(
+                let _ = app_emit.emit(
                     "transcription-error",
-                    serde_json::json!({ "message": e.to_string() }),
+                    json!({ "message": e.to_string() }),
                 );
             }
         }
@@ -196,11 +207,14 @@ pub async fn get_settings(state: State<'_, AppStateHandle>) -> Result<Settings, 
 
 #[tauri::command]
 pub async fn save_settings(
+    app: AppHandle,
     state: State<'_, AppStateHandle>,
     settings: Settings,
 ) -> Result<(), String> {
+    settings
+        .save_to_disk(&app)
+        .map_err(|e| e.to_string())?;
     let mut s = state.lock().await;
-    settings.save().map_err(|e| e.to_string())?;
     s.settings = settings;
     Ok(())
 }
@@ -258,4 +272,65 @@ fn append_recording_to_list(
     let mut recordings = load_recordings_list(app)?;
     recordings.insert(0, recording.clone());
     save_recordings_list(app, &recordings)
+}
+
+fn project_root_dev() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("..")
+}
+
+fn parakeet_script_path(app: &AppHandle) -> PathBuf {
+    if let Ok(res) = app.path().resource_dir() {
+        for p in [
+            res.join("scripts").join("parakeet_transcribe.py"),
+            res.join("parakeet_transcribe.py"),
+        ] {
+            if p.is_file() {
+                return p;
+            }
+        }
+    }
+    project_root_dev()
+        .join("scripts")
+        .join("parakeet_transcribe.py")
+}
+
+fn resolve_parakeet_python(app: &AppHandle) -> PathBuf {
+    if let Ok(res) = app.path().resource_dir() {
+        let bundled = if cfg!(windows) {
+            res.join("parakeet-venv").join("Scripts").join("python.exe")
+        } else {
+            res.join("parakeet-venv").join("bin").join("python3")
+        };
+        if bundled.is_file() {
+            return bundled;
+        }
+    }
+    let venv = if cfg!(windows) {
+        project_root_dev()
+            .join(".venv-parakeet")
+            .join("Scripts")
+            .join("python.exe")
+    } else {
+        project_root_dev()
+            .join(".venv-parakeet")
+            .join("bin")
+            .join("python3")
+    };
+    if venv.is_file() {
+        return venv;
+    }
+    PathBuf::from(if cfg!(windows) { "python" } else { "python3" })
+}
+
+fn persist_transcript_for_path(
+    app: &AppHandle,
+    recording_path: &str,
+    transcript: &crate::transcription::Transcript,
+) -> anyhow::Result<()> {
+    let mut list = load_recordings_list(app)?;
+    if let Some(r) = list.iter_mut().find(|r| r.path == recording_path) {
+        r.transcript = Some(transcript.clone());
+        save_recordings_list(app, &list)?;
+    }
+    Ok(())
 }

@@ -24,6 +24,9 @@ pub struct Recording {
     /// User-visible label (timestamp + path hint by default). Stored in recordings.json.
     #[serde(default)]
     pub display_name: String,
+    /// Last successful transcript for this recording (persisted in recordings.json).
+    #[serde(default)]
+    pub transcript: Option<crate::transcription::Transcript>,
     pub duration_secs: u32,
     pub created_at: String,
 }
@@ -206,6 +209,7 @@ pub fn start_recording(
         path: path.to_string_lossy().into_owned(),
         filename,
         display_name,
+        transcript: None,
         duration_secs: 0,
         created_at,
     };

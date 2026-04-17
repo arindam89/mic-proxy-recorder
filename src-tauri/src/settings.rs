@@ -1,4 +1,6 @@
 use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
+use tauri::{AppHandle, Manager};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Settings {
@@ -55,11 +57,29 @@ impl Default for Settings {
 }
 
 impl Settings {
-    pub fn load_or_default() -> Self {
-        Self::default()
+    fn file_path(app: &AppHandle) -> Result<PathBuf, String> {
+        app.path()
+            .app_data_dir()
+            .map(|p| p.join("settings.json"))
+            .map_err(|e| e.to_string())
     }
 
-    pub fn save(&self) -> anyhow::Result<()> {
+    pub fn load_from_disk(app: &AppHandle) -> Result<Self, String> {
+        let path = Self::file_path(app)?;
+        if !path.exists() {
+            return Ok(Self::default());
+        }
+        let data = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
+        serde_json::from_str(&data).map_err(|e| e.to_string())
+    }
+
+    pub fn save_to_disk(&self, app: &AppHandle) -> anyhow::Result<()> {
+        let path = Self::file_path(app).map_err(|e| anyhow::anyhow!(e))?;
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        let data = serde_json::to_string_pretty(self)?;
+        std::fs::write(path, data)?;
         Ok(())
     }
 }

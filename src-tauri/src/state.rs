@@ -10,7 +10,7 @@ impl AppState {
     pub fn new() -> Self {
         Self {
             recorder: None,
-            settings: Settings::load_or_default(),
+            settings: Settings::default(),
         }
     }
 }

@@ -3,7 +3,7 @@
 use crate::transcription::{Transcript, TranscriptSegment};
 use anyhow::{Context, Result};
 use serde::Deserialize;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::Command;
 
 #[derive(Debug, Deserialize)]
@@ -22,15 +22,6 @@ struct ParakeetSegmentJson {
     text: Option<String>,
 }
 
-fn project_root() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("..")
-}
-
-fn script_path() -> PathBuf {
-    project_root().join("scripts").join("parakeet_transcribe.py")
-}
-
-/// Prefer repo-local `.venv-parakeet` so the desktop app finds NeMo without changing global PATH.
 fn stderr_tail(s: &str, max_chars: usize) -> String {
     let n = s.chars().count();
     if n <= max_chars {
@@ -65,43 +56,28 @@ fn parse_parakeet_json_stdout(stdout: &str) -> Result<ParakeetJson> {
     anyhow::bail!("stdout did not contain a JSON object")
 }
 
-fn resolve_python_executable() -> PathBuf {
-    let venv_python = if cfg!(windows) {
-        project_root()
-            .join(".venv-parakeet")
-            .join("Scripts")
-            .join("python.exe")
-    } else {
-        project_root()
-            .join(".venv-parakeet")
-            .join("bin")
-            .join("python3")
-    };
-    if venv_python.is_file() {
-        return venv_python;
-    }
-    PathBuf::from(if cfg!(windows) { "python" } else { "python3" })
-}
-
-/// Transcribe using NeMo Parakeet (see `scripts/parakeet_transcribe.py`).
-pub fn transcribe(recording_path: &Path, recording_id: &str) -> Result<Transcript> {
-    let script = script_path();
-    if !script.is_file() {
+/// Transcribe using NeMo Parakeet. `script_path` / `python_exe` come from the app (dev tree or bundled resources).
+pub fn transcribe(
+    recording_path: &Path,
+    recording_id: &str,
+    script_path: &Path,
+    python_exe: &Path,
+) -> Result<Transcript> {
+    if !script_path.is_file() {
         anyhow::bail!(
-            "Parakeet helper script missing at {}. Ensure scripts/parakeet_transcribe.py exists.",
-            script.display()
+            "Parakeet helper script missing at {}. Run the build with scripts bundled or use a dev checkout.",
+            script_path.display()
         );
     }
 
-    let py = resolve_python_executable();
-    let output = Command::new(&py)
-        .arg(&script)
+    let output = Command::new(python_exe)
+        .arg(script_path)
         .arg(recording_path)
         .output()
         .with_context(|| {
             format!(
                 "Failed to run {} (create .venv-parakeet per docs or install Python)",
-                py.display()
+                python_exe.display()
             )
         })?;
 
