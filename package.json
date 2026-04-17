@@ -9,7 +9,9 @@
     "build:all": "bash ./scripts/build.sh",
     "build:all:ci": "bash ./scripts/build.sh --yes",
     "preview": "vite preview",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "tori": "tauri",
+    "tori:dev": "tauri dev"
   },
   "dependencies": {
     "@tauri-apps/api": "^2",

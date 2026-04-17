@@ -41,8 +41,16 @@ npm run dev
 npm run tauri -- dev
 ```
 
+Equivalent shortcuts (optional):
+
+```bash
+npm run tori:dev
+# or: npm run tori -- dev
+```
+
 Notes:
 - The app uses Tauri's injected JS API. Running `npm run dev` alone opens the app in a normal browser without Tauri's runtime; calling Tauri APIs (like `invoke`) will fail in that environment. Use `npm run tauri -- dev` when you need the native backend.
+- Tauri v2 does not expose `window.__TAURI__` unless `withGlobalTauri` is enabled; the UI detects the desktop runtime with `isTauri()` from `@tauri-apps/api/core` so `invoke` works in the real app.
 
 ## Build / Package
 

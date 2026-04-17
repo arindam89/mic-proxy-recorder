@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { invoke as _tauriInvoke } from "@tauri-apps/api/core";
+import { invoke as _tauriInvoke, isTauri } from "@tauri-apps/api/core";
 import { listen as _tauriListen } from "@tauri-apps/api/event";
 import type {
   AppSettings,
@@ -253,12 +253,12 @@ export default function App() {
   );
 }
 
-// Safe invoke wrapper: when running the Vite dev server in a normal browser
-// `window.__TAURI__` won't exist. This prevents the UI from throwing a
-// TypeError and provides a helpful error message instead. Run the app with
-// `npm run tauri -- dev` to have the Tauri API available.
+// Safe invoke wrapper: when running the Vite dev server in a normal browser,
+// Tauri is not present. In Tauri v2, `window.__TAURI__` is only set when
+// `withGlobalTauri` is true; IPC uses `isTauri()` / internals instead — use
+// `isTauri()` so the real desktop app is detected correctly.
 function invoke<T = unknown>(cmd: string, params?: Record<string, unknown>): Promise<T> {
-  if (typeof window !== "undefined" && (window as any).__TAURI__ !== undefined) {
+  if (typeof window !== "undefined" && isTauri()) {
     return _tauriInvoke(cmd, params) as Promise<T>;
   }
   return Promise.reject(
@@ -267,7 +267,7 @@ function invoke<T = unknown>(cmd: string, params?: Record<string, unknown>): Pro
 }
 
 function listen<T = unknown>(event: string, handler: (e: any) => void): Promise<() => void> {
-  if (typeof window !== "undefined" && (window as any).__TAURI__ !== undefined) {
+  if (typeof window !== "undefined" && isTauri()) {
     return _tauriListen<T>(event, handler) as Promise<() => void>;
   }
   // No-op unlisten when not running inside Tauri
