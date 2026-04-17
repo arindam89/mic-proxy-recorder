@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { AudioDevice } from "../types";
 
 interface Props {
@@ -36,11 +36,24 @@ export default function MeetingBridgePanel({
 }: Props) {
   const [hintDismissed, setHintDismissed] = useState(false);
 
+  /** Virtual cable must be capturable as Meet "speakers" → needs same name in input + output lists. */
+  const duplexCableDevices = useMemo(
+    () => playbackDevices.filter((p) => inputDevices.some((i) => i.id === p.id)),
+    [playbackDevices, inputDevices]
+  );
+
   useEffect(() => {
-    if (bridgeOutputId || playbackDevices.length === 0) return;
-    const bh = playbackDevices.find((d) => /blackhole/i.test(d.name));
-    onBridgeOutputIdChange(bh?.id ?? playbackDevices[0]?.id ?? "");
-  }, [playbackDevices, bridgeOutputId, onBridgeOutputIdChange]);
+    if (meetingBridgeActive) return;
+    if (duplexCableDevices.length === 0) {
+      if (bridgeOutputId) onBridgeOutputIdChange("");
+      return;
+    }
+    const validIds = new Set(duplexCableDevices.map((d) => d.id));
+    if (!bridgeOutputId || !validIds.has(bridgeOutputId)) {
+      const bh = duplexCableDevices.find((d) => /blackhole/i.test(d.name));
+      onBridgeOutputIdChange(bh?.id ?? duplexCableDevices[0].id);
+    }
+  }, [meetingBridgeActive, duplexCableDevices, bridgeOutputId, onBridgeOutputIdChange]);
 
   const physicalLabel =
     inputDevices.find((d) => d.id === physicalInputId)?.name ??
@@ -71,7 +84,7 @@ export default function MeetingBridgePanel({
           ) for Meet/Zoom to use as the <span className="text-gray-300">microphone</span>. Meet&apos;s{" "}
           <span className="text-gray-300">speaker</span> must be the <strong>same</strong> cable so remote audio does
           not leak into your room mic (feedback). The app plays that virtual capture to your{" "}
-          <span className="text-gray-300">real speakers</span>           and writes a <strong>stereo</strong> WAV (left = you,
+          <span className="text-gray-300">real speakers</span> and writes a <strong>stereo</strong> WAV (left = you,
           right = Meet). One-time BlackHole install required — the app does not ship a macOS driver. Architecture:{" "}
           <code className="rounded bg-surface-800 px-1 text-[11px] text-primary-200">specs/RELAY_HUB_ARCHITECTURE.md</code>.
         </p>
@@ -93,16 +106,24 @@ export default function MeetingBridgePanel({
 
       <label className="flex flex-col gap-1">
         <span className="text-xs text-gray-500">Virtual cable (Meet mic + Meet speakers)</span>
+        <p className="text-[11px] leading-snug text-gray-500">
+          Only devices that macOS lists as <strong>both</strong> a mic and a speaker appear here (e.g. BlackHole). Your
+          laptop speakers are output-only and cannot be the cable.
+        </p>
         <select
           value={bridgeOutputId}
           onChange={(e) => onBridgeOutputIdChange(e.target.value)}
-          disabled={meetingBridgeActive}
+          disabled={meetingBridgeActive || duplexCableDevices.length === 0}
           className="rounded-lg border border-surface-600 bg-surface-900 px-2 py-2 text-sm text-white disabled:opacity-50"
         >
-          {playbackDevices.length === 0 ? (
-            <option value="">No playback devices found</option>
+          {duplexCableDevices.length === 0 ? (
+            <option value="">
+              {playbackDevices.length === 0
+                ? "No playback devices found"
+                : "No duplex cable — install BlackHole (input + output with same name)"}
+            </option>
           ) : (
-            playbackDevices.map((d) => (
+            duplexCableDevices.map((d) => (
               <option key={d.id} value={d.id}>
                 {d.name}
                 {d.is_default ? " (default output)" : ""}
@@ -138,7 +159,7 @@ export default function MeetingBridgePanel({
           <button
             type="button"
             className="btn-primary text-sm"
-            disabled={recorderBusy || !bridgeOutputId || playbackDevices.length === 0}
+            disabled={recorderBusy || !bridgeOutputId || duplexCableDevices.length === 0}
             onClick={onStart}
           >
             Start meeting bridge

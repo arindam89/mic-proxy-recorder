@@ -132,8 +132,18 @@ pub fn start_meeting_bridge(
     std::fs::create_dir_all(&recordings_dir).context("Failed to create recordings dir")?;
 
     let mic_dev = get_input_device(physical_mic_id)?;
-    let virt_in_dev = get_input_device(Some(virtual_cable_id))?;
-    let virt_out_dev = get_output_device(Some(virtual_cable_id))?;
+    let virt_in_dev = get_input_device(Some(virtual_cable_id)).with_context(|| {
+        format!(
+            "Virtual cable \"{}\" was not found as a **microphone** (recording input). The duplex bridge needs one OS name that exists in **both** input and output lists (e.g. BlackHole 2ch). Built-in speakers are playback-only.",
+            virtual_cable_id
+        )
+    })?;
+    let virt_out_dev = get_output_device(Some(virtual_cable_id)).with_context(|| {
+        format!(
+            "Virtual cable \"{}\" was not found as a **speaker** (playback output). Pick the same BlackHole (or cable) name you see under outputs.",
+            virtual_cable_id
+        )
+    })?;
     let speaker_dev = get_output_device(physical_speakers_id)?;
 
     let mic_conf = mic_dev.default_input_config()?;

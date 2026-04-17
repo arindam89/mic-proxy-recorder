@@ -7,7 +7,7 @@ This repo is a Tauri desktop application (Rust backend + React frontend) that pr
 ### Meeting bridge (Google Meet / Zoom) — duplex relay
 
 1. Install **[BlackHole](https://existential.audio/blackhole/)** (or another virtual cable listed as **both** input and output with the **same** name).
-2. On **Recorder → Meeting bridge**, set **Virtual cable** to that device (e.g. “BlackHole 2ch”).
+2. On **Recorder → Meeting bridge**, set **Virtual cable** to that device (e.g. “BlackHole 2ch”). The menu only lists devices macOS exposes as **both** input and output with the same name; built-in **MacBook Air Speakers** are playback-only and cannot be used as the virtual cable.
 3. Set **Hear the call on** to your real headphones/speakers (or **Default** for the system output). Remote audio is played there so it does not re-enter your mic through the laptop speakers.
 4. Click **Start meeting bridge**. The app routes your **physical microphone** (optional denoise) into the virtual cable and plays Meet’s output from the cable to your speakers. It records a **stereo** WAV (`meeting-duplex-*.wav`): **left = you**, **right = Meet**.
 5. In **Google Meet**, set **both** the **microphone** and the **speaker** to that same virtual device. If Meet’s speaker is still your built-in speakers while the mic is BlackHole, you will get echo/feedback.
