@@ -6,6 +6,7 @@ cd "$ROOT_DIR"
 
 AUTO_INSTALL=0
 MODE="build"
+WITH_PARAKEET_VENV=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -17,8 +18,14 @@ while [[ $# -gt 0 ]]; do
       MODE="dev"
       shift
       ;;
+    --with-parakeet-venv)
+      WITH_PARAKEET_VENV=1
+      shift
+      ;;
     --help|-h)
-      echo "Usage: $0 [--yes] [--dev]" && exit 0
+      echo "Usage: $0 [--yes] [--dev] [--with-parakeet-venv]"
+      echo "  --with-parakeet-venv  Run scripts/setup-parakeet-venv.sh before the Rust build (NeMo Parakeet)."
+      exit 0
       ;;
     *)
       shift
@@ -89,6 +96,11 @@ fi
 
 info "Installing JS dependencies (npm install)..."
 npm install || die "npm install failed"
+
+if [ "$WITH_PARAKEET_VENV" -eq 1 ]; then
+  info "Creating Parakeet virtualenv (scripts/setup-parakeet-venv.sh)..."
+  bash "$ROOT_DIR/scripts/setup-parakeet-venv.sh" || die "Parakeet venv setup failed"
+fi
 
 info "Building frontend (npm run build)..."
 npm run build || die "npm run build failed"

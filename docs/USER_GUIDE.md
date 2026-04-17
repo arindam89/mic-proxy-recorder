@@ -68,6 +68,8 @@ npm run tauri -- build
 
 The Tauri config is in `src-tauri/tauri.conf.json` and the frontend build output is expected in `../dist`.
 
+- Optional **full script** (Rust, frontend, then Tauri package): `bash scripts/build.sh`. Add **`--with-parakeet-venv`** to run `scripts/setup-parakeet-venv.sh` first so the Parakeet Python environment exists before you package (the venv itself is **not** copied into the app bundle by default—only `scripts/` is bundled as resources; keep using `.venv-parakeet` beside the repo for development).
+
 ## Recording and transcription
 
 ### Recorder UI (start / stop / timer)
@@ -80,6 +82,7 @@ Start and stop return the active `Recording` from the Rust backend immediately, 
 - After **Stop**, use the built-in **audio player** on the Recorder screen or open **Recordings** for the same controls on every clip. Playback uses Tauri’s **asset protocol** for files under app data (`src-tauri/tauri.conf.json` → `app.security.assetProtocol`).
 - **Download** copies the WAV to a path you choose (default filename uses the display name). The save dialog requires the **`dialog:default`** permission in `src-tauri/capabilities/default.json`.
 - **Rename** edits only the display name (safe for transcription paths); use **Rename** on the Recorder card or on each row in **Recordings**.
+- On **Recordings**, each clip that has been transcribed shows the **transcript inline**. Use **Download transcript** to save a **Markdown** (`.md`) file. Use the **search** field to filter by **display name** or **transcript text**; matching substrings are **highlighted** in the title and transcript preview.
 
 ### Whisper (bundled whisper.cpp)
 
@@ -113,7 +116,11 @@ Parakeet runs in a separate Python process using `scripts/parakeet_transcribe.py
 
 ### Transcript export
 
-On the transcript card, use **Copy text**, **Download .txt**, or **Download .srt** (segments with timestamps when available).
+On the transcript card, use **Copy text**, **Download .txt**, or **Download .srt** (segments with timestamps when available). On **Recordings**, use **Download transcript** for a Markdown export of the stored transcript.
+
+### Settings persistence
+
+**Settings** (including **Parakeet** vs **Whisper**, device, noise cancellation, and model path) are written to **`settings.json`** in the app data directory when you save from the Settings screen, and reloaded the next time you launch the app.
 
 ## Tests
 

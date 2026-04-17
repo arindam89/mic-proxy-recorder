@@ -100,8 +100,8 @@ See Section 4 (API Contracts) for full command listing.
 - Held in `Arc<Mutex<AppState>>` and registered with Tauri's `.manage()`
 
 ### 3.7 Settings (`src-tauri/src/settings.rs`)
-- Persisted to `$APPDATA/settings.json` (stub: in-memory for v0.1)
-- Fields: `noise_cancel_enabled`, `noise_cancel_level`, `input_device_id`, `output_format`, `model_path`
+- Persisted to `$APPDATA/settings.json` on save; loaded at startup in `lib.rs` setup.
+- Fields: `noise_cancel_enabled`, `noise_cancel_level`, `input_device_id`, `output_format`, `model_path`, `transcription_backend`
 
 ---
 
@@ -119,8 +119,8 @@ Stops the active recording, finalizes the WAV file. Emits `recording-stopped { r
 ### `toggle_pause_recording() → void`
 Toggles the active recording between paused and playing.
 
-### `transcribe_recording(recordingPath, modelPath) → void`
-Starts an async transcription job. On success emits `transcription-done { transcript: Transcript }`. On failure emits `transcription-error { message: string }`.
+### `transcribe_recording(recordingPath) → void`
+Starts an async transcription job (backend and model path come from `AppState.settings`). On success emits `transcription-done { transcript: Transcript, recordingPath: string }` and updates `recordings.json` with the transcript. On failure emits `transcription-error { message: string }`.
 
 ### `list_recordings() → Recording[]`
 Returns all persisted recordings sorted newest-first.
@@ -132,7 +132,7 @@ Deletes the recording file and removes it from the persisted list.
 Returns current application settings.
 
 ### `save_settings(settings: AppSettings) → void`
-Persists new settings.
+Persists new settings to `settings.json` under the app data directory and updates in-memory state.
 
 ---
 
@@ -144,6 +144,8 @@ interface Recording {
   id: string;            // UUID v4
   path: string;          // Absolute path to the WAV file
   filename: string;      // Basename (e.g., "recording-a1b2c3d4.wav")
+  display_name?: string; // User-visible label
+  transcript?: Transcript | null; // Last successful transcript (persisted in recordings.json)
   duration_secs: number; // Duration in whole seconds
   created_at: string;    // ISO 8601 timestamp
 }
