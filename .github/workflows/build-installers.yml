@@ -63,7 +63,7 @@ jobs:
           mkdir -p assets/models
           MODEL_URL="${{ inputs.model_url }}"
           if [ -z "$MODEL_URL" ]; then
-            echo "bundle_model=true but no model_url provided."
+            echo "bundle_model is true but no model_url provided."
             echo "Set model_url to a direct downloadable file URL."
             exit 1
           fi
